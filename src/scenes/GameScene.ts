@@ -22,10 +22,18 @@ export class GameScene extends Scene {
   private currentLevelId: string = '';
   private isReplayMode: boolean = false; 
   private revealTimer?: Phaser.Time.TimerEvent;
+  private revealAlphaGuard?: Phaser.Time.TimerEvent;
+  // Reveal state: NO usar guide.alpha como fuente de verdad, porque mezcla reveal temporal, reveal permanente y el botón 👁️.
+  private revealPermanentActive: boolean = false;
+  private revealTempActive: boolean = false;
+  private revealEyeHoldActive: boolean = false;
+  private readonly revealPermanentAlpha: number = 0.3;
+  private readonly revealTempAlpha: number = 0.3;
+  private readonly revealEyeHoldAlpha: number = 0.4;
   private isSpecialLevel: boolean = false;
   private elapsedMs: number = 0;
   private lastBroadcastTime: number = 0;
-  private visibilityPersistHandler?: () => void;
+  private visibilityPersistHandler?: (ev?: Event) => void;
   private timerStore = TimerStore.getInstance();
   private pocketManager = new PocketManager();
   private activePocketIndex: number = 0;
@@ -133,8 +141,14 @@ export class GameScene extends Scene {
     // Importante: registrar handlers ANTES de lanzar la UI, para que el primer click no se pierda.
     this.setupEventHandlers();
     this.scene.launch('UIScene');
-    this.visibilityPersistHandler = () => {
-        if (document.hidden) {
+    // Persist robusto cuando el usuario deja la pestaña/app:
+    // - `visibilitychange` (document.hidden) cubre pestañas en background (incluye tab-discard scenarios)
+    // - `beforeunload` cubre cierres/refresh.
+    // Importante: también guardamos la sesión para no perder estados como Revelar ∞.
+    this.visibilityPersistHandler = (ev?: Event) => {
+        const isUnload = (ev as any)?.type === 'beforeunload';
+        if (document.hidden || isUnload) {
+            this.saveGameSession();
             this.timerStore.persist(true);
         }
     };
@@ -146,10 +160,24 @@ export class GameScene extends Scene {
         this.createResetButton();
     } else {
         if (session && session.levelId === this.currentLevelId && session.isRevealActive) {
-            const guide = this.puzzleBoard.getContainer().getByName('guide_image') as Phaser.GameObjects.Image;
-            if (guide) guide.setAlpha(0.3);
+            // Persistimos solo el "reveal permanente" (∞). El temporal (20s) no debe quedar guardado.
+            this.revealPermanentActive = true;
         }
     }
+    this.updateGuideAlpha();
+
+    // Guard: si por cualquier motivo (p.ej. context loss / re-creación interna) la guía pierde su alpha,
+    // la re-aplicamos periódicamente mientras exista algún modo de reveal activo.
+    if (this.revealAlphaGuard) this.revealAlphaGuard.remove();
+    this.revealAlphaGuard = this.time.addEvent({
+        delay: 1000,
+        loop: true,
+        callback: () => {
+            if (this.revealPermanentActive || this.revealTempActive || this.revealEyeHoldActive) {
+                this.updateGuideAlpha();
+            }
+        },
+    });
 
     // Emit init event
     this.events.emit('game-started', this.puzzleBoard.getPieces().length);
@@ -315,6 +343,7 @@ export class GameScene extends Scene {
       this.events.off('request-pocket-snapshot');
       this.events.off('cancel-pocket-camera');
       if (this.revealTimer) this.revealTimer.remove();
+      if (this.revealAlphaGuard) this.revealAlphaGuard.remove();
   }
 
   private onPiecePlaced() {
@@ -380,9 +409,8 @@ export class GameScene extends Scene {
       const elapsed = this.timerStore.getElapsed();
       this.elapsedMs = elapsed;
 
-      const container = this.puzzleBoard.getContainer();
-      const guide = container ? container.getByName('guide_image') as Phaser.GameObjects.Image : null;
-      const isRevealActive = guide ? guide.alpha > 0 : false;
+      // Persistimos solo el estado del revelar infinito (∞).
+      const isRevealActive = this.revealPermanentActive;
       
       const pieces = this.puzzleBoard.getPieces();
 
@@ -449,42 +477,72 @@ export class GameScene extends Scene {
   }
 
   // Reveal Logic Helpers
-  private onShowGuide(visible: boolean) {
+  private updateGuideAlpha() {
       const guide = this.puzzleBoard.getContainer().getByName('guide_image') as Phaser.GameObjects.Image;
-      if (guide) guide.setAlpha(visible ? 0.4 : 0);
+      if (!guide) return;
+      if (this.revealEyeHoldActive) {
+          guide.setAlpha(this.revealEyeHoldAlpha);
+          return;
+      }
+      if (this.revealPermanentActive) {
+          guide.setAlpha(this.revealPermanentAlpha);
+          return;
+      }
+      if (this.revealTempActive) {
+          guide.setAlpha(this.revealTempAlpha);
+          return;
+      }
+      guide.setAlpha(0);
+  }
+
+  private onShowGuide(visible: boolean) {
+      this.revealEyeHoldActive = visible;
+      this.updateGuideAlpha();
   }
 
   private toggleRevealPermanent() {
-      const guide = this.puzzleBoard.getContainer().getByName('guide_image') as Phaser.GameObjects.Image;
-      if (guide) {
-          const current = guide.alpha;
-          const newAlpha = current > 0 ? 0 : 0.3;
-          guide.setAlpha(newAlpha);
-          // Consume only when turning ON
-          if (newAlpha > 0 && current <= 0) {
-              this.events.emit('powerup-used', 'reveal_perm');
+      const wasActive = this.revealPermanentActive;
+      this.revealPermanentActive = !this.revealPermanentActive;
+
+      // Reveal ∞ es más potente: si se activa, anula el revelar temporal (y su countdown).
+      if (this.revealPermanentActive) {
+          if (this.revealTempActive) {
+              this.revealTempActive = false;
+              this.events.emit('reveal-temp-changed', false);
           }
-          this.saveGameSession();
+          if (this.revealTimer) {
+              this.revealTimer.remove();
+              this.revealTimer = undefined;
+          }
       }
+
+      this.updateGuideAlpha();
+
+      // Consumir solo cuando se enciende
+      if (this.revealPermanentActive && !wasActive) {
+          this.events.emit('powerup-used', 'reveal_perm');
+      }
+      this.saveGameSession();
   }
 
   private toggleRevealTemporary() {
-      const guide = this.puzzleBoard.getContainer().getByName('guide_image') as Phaser.GameObjects.Image;
-      if (guide) {
-          // If already visible (temp active), ignore to avoid double-consume
-          if (guide.alpha <= 0) {
-              guide.setAlpha(0.3);
-              this.events.emit('reveal-temp-changed', true);
-              this.events.emit('powerup-used', 'reveal_temp');
-              
-              if (this.revealTimer) this.revealTimer.remove();
-              
-              this.revealTimer = this.time.delayedCall(20000, () => {
-                  guide.setAlpha(0);
-                  this.events.emit('reveal-temp-changed', false);
-              });
-          }
-      }
+      // Si el infinito está activo, no tiene sentido activar el temporal y no debe consumir.
+      if (this.revealPermanentActive) return;
+      // Si ya está activo, ignorar (evitar doble consumo)
+      if (this.revealTempActive) return;
+
+      this.revealTempActive = true;
+      this.updateGuideAlpha();
+      this.events.emit('reveal-temp-changed', true);
+      this.events.emit('powerup-used', 'reveal_temp');
+
+      if (this.revealTimer) this.revealTimer.remove();
+
+      this.revealTimer = this.time.delayedCall(20000, () => {
+          this.revealTempActive = false;
+          this.updateGuideAlpha(); // clave: NO apagar si el infinito está activo (prioridad)
+          this.events.emit('reveal-temp-changed', false);
+      });
   }
 
   private createResetButton() {
