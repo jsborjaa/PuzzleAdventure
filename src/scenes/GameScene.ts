@@ -451,7 +451,7 @@ export class GameScene extends Scene {
   // Reveal Logic Helpers
   private onShowGuide(visible: boolean) {
       const guide = this.puzzleBoard.getContainer().getByName('guide_image') as Phaser.GameObjects.Image;
-      if (guide) guide.setAlpha(visible ? 0.3 : 0);
+      if (guide) guide.setAlpha(visible ? 0.4 : 0);
   }
 
   private toggleRevealPermanent() {

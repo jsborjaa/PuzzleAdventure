@@ -97,8 +97,11 @@ export class PocketFocusMode {
   private readonly solvedTint = 0xddffdd;
   private readonly vividTint = 0xffffff;
   private readonly guideSolvedAlpha = 0.55;
-  private readonly guideUnsolvedAlpha = 0.22;
-  private readonly guideUnsolvedTint = 0x777777;
+  // La "foto" del bolsillo se representa como guías fantasma. Si la tintamos gris + alpha bajo,
+  // se percibe demasiado apagada vs la guía del tablero principal (~0.3).
+  private readonly guideUnsolvedAlpha = 0.4;
+  // 0xffffff = sin tint (evita oscurecer por multiplicación de color)
+  private readonly guideUnsolvedTint = 0xffffff;
 
   constructor(scene: Phaser.Scene, board: PuzzleBoard, pocketManager: PocketManager) {
     this.scene = scene;
