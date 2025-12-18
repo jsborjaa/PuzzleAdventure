@@ -67,6 +67,18 @@ export class SelectionTool extends AbstractTool {
         const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
         const relX = worldPoint.x - boardX;
         const relY = worldPoint.y - boardY;
+
+        // Si el cursor está fuera del área del rompecabezas, ocultar el preview/resaltado.
+        // (Además evita la confusión de ver un cuadro "clampado" en borde cuando en realidad estás fuera)
+        const insideBoard =
+          relX >= 0 &&
+          relY >= 0 &&
+          relX <= this.board.boardWidth &&
+          relY <= this.board.boardHeight;
+        if (!insideBoard) {
+            if (this.previewImage) this.previewImage.setVisible(false);
+            return;
+        }
         
         const col = Math.floor(relX / pieceW);
         const row = Math.floor(relY / pieceH);

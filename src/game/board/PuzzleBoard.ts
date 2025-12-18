@@ -142,7 +142,8 @@ export class PuzzleBoard {
         piece.isSolved = true;
         piece.disableInteractive();
         this.layers.moveToSolved(piece);
-        piece.setTint(0xddffdd); // Solved tint
+        // Mantener el mismo color que piezas no resueltas (evitar diferencias visuales).
+        piece.setTint(0xffffff);
     }
 
     private scatterPiece(piece: Piece): void {

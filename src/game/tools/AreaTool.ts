@@ -21,40 +21,30 @@ export class AreaTool extends SelectionTool {
         const relX = worldPoint.x - boardX;
         const relY = worldPoint.y - boardY;
 
-        // Compute intended start based on pointer (centered box)
+        // Si el mouse está fuera del área del rompecabezas, NO hacer nada ni consumir power-up.
+        const insideBoard =
+          relX >= 0 &&
+          relY >= 0 &&
+          relX <= this.board.boardWidth &&
+          relY <= this.board.boardHeight;
+        if (!insideBoard) return;
+
+        // Mantener el cuadro completo dentro del tablero (misma lógica que el resaltado en SelectionTool)
         const centerCol = Math.floor(relX / pieceW);
         const centerRow = Math.floor(relY / pieceH);
-        const rawStartCol = this.gridSize > 1 ? centerCol - 1 : centerCol;
-        const rawStartRow = this.gridSize > 1 ? centerRow - 1 : centerRow;
-
-        // World-space box for the selection (may extend outside board)
-        const boxLeft = boardX + rawStartCol * pieceW;
-        const boxTop = boardY + rawStartRow * pieceH;
-        const boxRight = boxLeft + this.gridSize * pieceW;
-        const boxBottom = boxTop + this.gridSize * pieceH;
-
-        // Board bounds
-        const boardRight = boardX + this.board.boardWidth;
-        const boardBottom = boardY + this.board.boardHeight;
-
-        // If no intersection with board, do nothing
-        const noOverlap = boxRight <= boardX || boxLeft >= boardRight || boxBottom <= boardY || boxTop >= boardBottom;
-        if (noOverlap) return;
+        const rawStartCol = this.gridSize > 1 ? centerCol - Math.floor(this.gridSize / 2) : centerCol;
+        const rawStartRow = this.gridSize > 1 ? centerRow - Math.floor(this.gridSize / 2) : centerRow;
 
         // Grid bounds from pieces
         const maxCol = Math.max(...pieces.map(p => p.gridCol));
         const maxRow = Math.max(...pieces.map(p => p.gridRow));
 
-        // Clamp selection to board to find the overlapping cells
-        const startCol = Math.max(0, rawStartCol);
-        const startRow = Math.max(0, rawStartRow);
-        const endCol = Math.min(rawStartCol + this.gridSize - 1, maxCol);
-        const endRow = Math.min(rawStartRow + this.gridSize - 1, maxRow);
-
-        // If no overlap with the board, do nothing
-        if (endCol < startCol || endRow < startRow) {
-            return;
-        }
+        const maxStartCol = Math.max(0, maxCol - (this.gridSize - 1));
+        const maxStartRow = Math.max(0, maxRow - (this.gridSize - 1));
+        const startCol = Phaser.Math.Clamp(rawStartCol, 0, maxStartCol);
+        const startRow = Phaser.Math.Clamp(rawStartRow, 0, maxStartRow);
+        const endCol = startCol + this.gridSize - 1;
+        const endRow = startRow + this.gridSize - 1;
 
         const selectedPieces = pieces.filter(p => 
             !p.isSolved && 

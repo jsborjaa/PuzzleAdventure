@@ -24,7 +24,8 @@ export class SnapSystem {
     this.audio = AudioService.getInstance();
     this.snapDistance = options.snapDistance ?? 30;
     this.requireAngle0 = options.requireAngle0 ?? true;
-    this.solvedTint = options.solvedTint ?? 0xddffdd;
+    // Mantener el mismo color que piezas no resueltas (evitar diferencias visuales).
+    this.solvedTint = options.solvedTint ?? 0xffffff;
     this.onSolved = options.onSolved;
   }
 

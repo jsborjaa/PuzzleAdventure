@@ -94,7 +94,8 @@ export class PocketFocusMode {
   >();
 
   // Paleta consistente con el tablero principal
-  private readonly solvedTint = 0xddffdd;
+  // Mantener el mismo color que piezas no resueltas (evitar diferencias visuales).
+  private readonly solvedTint = 0xffffff;
   private readonly vividTint = 0xffffff;
   private readonly guideSolvedAlpha = 0.55;
   // La "foto" del bolsillo se representa como guías fantasma. Si la tintamos gris + alpha bajo,
