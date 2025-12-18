@@ -89,6 +89,15 @@ function generateLevels(): LevelData[] {
 
 export const LEVELS: LevelData[] = generateLevels();
 
+function withBaseUrl(path: string): string {
+  // Vite injects BASE_URL at build time. In GitHub Pages it becomes "/<repo>/"
+  // Ensure exactly one slash between base and path.
+  const base = import.meta.env.BASE_URL || '/';
+  const trimmedBase = base.endsWith('/') ? base.slice(0, -1) : base;
+  const trimmedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${trimmedBase}${trimmedPath}`;
+}
+
 // Niveles especiales (eventos)
 export const SPECIAL_LEVELS: LevelData[] = [
   {
@@ -96,7 +105,7 @@ export const SPECIAL_LEVELS: LevelData[] = [
     title: 'Diario',
     difficulty: 200,
     imageKey: 'stage_daily',
-    imageUrl: '/esp_events/daily/Stage_D.jpg',
+    imageUrl: withBaseUrl('esp_events/daily/Stage_D.jpg'),
     eventType: 'daily',
     alwaysUnlocked: true,
   },
@@ -105,7 +114,7 @@ export const SPECIAL_LEVELS: LevelData[] = [
     title: 'Semanal',
     difficulty: 500,
     imageKey: 'stage_weekly',
-    imageUrl: '/esp_events/weekly/Stage_S.jpg',
+    imageUrl: withBaseUrl('esp_events/weekly/Stage_S.jpg'),
     eventType: 'weekly',
     alwaysUnlocked: true,
   },
@@ -114,7 +123,7 @@ export const SPECIAL_LEVELS: LevelData[] = [
     title: 'Mensual',
     difficulty: 1000,
     imageKey: 'stage_monthly',
-    imageUrl: '/esp_events/monthly/Stage_M.jpg',
+    imageUrl: withBaseUrl('esp_events/monthly/Stage_M.jpg'),
     eventType: 'monthly',
     alwaysUnlocked: true,
   },
