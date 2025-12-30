@@ -66,8 +66,18 @@ export class GameScene extends Scene {
     // --- Auto-Zoom & Camera Setup for Mobile Responsiveness ---
     // Read WorldBounds from Board
     const bounds = this.puzzleBoard.worldBounds;
-    // Set camera bounds to match virtual world
-    this.cameras.main.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+    
+    // Set loose camera bounds to allow free movement (infinite panning feel)
+    // Using a large padding around the actual game area.
+    // If the board is e.g. 2000x2000, padding 4000 gives ample space.
+    const padding = 4000;
+    this.cameras.main.setBounds(
+        bounds.x - padding, 
+        bounds.y - padding, 
+        bounds.width + padding * 2, 
+        bounds.height + padding * 2
+    );
+    
     // Center camera on the board initially
     this.cameras.main.centerOn(bounds.centerX, bounds.centerY);
     
