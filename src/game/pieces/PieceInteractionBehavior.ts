@@ -41,10 +41,18 @@ export function attachPieceInteraction(scene: Scene, piece: Piece, options: Piec
   const idleDepth = options.idleDepth ?? 1;
   const dragDepth = options.dragDepth ?? 100;
 
+  // Variables para detectar "Tap"
+  let startX = 0;
+  let startY = 0;
+  const TAP_THRESHOLD = 10; // Pixeles maximos para considerar un movimiento como tap
+
   piece.setInteractive({ draggable: true, useHandCursor: true });
 
-  const onDragStart = () => {
+  const onDragStart = (pointer: Phaser.Input.Pointer) => {
     if (piece.isSolved) return;
+    startX = pointer.x;
+    startY = pointer.y;
+
     audio.playPop();
     piece.setDepth(dragDepth);
     piece.setScale(1.1);
@@ -66,8 +74,16 @@ export function attachPieceInteraction(scene: Scene, piece: Piece, options: Piec
     piece.y = y;
   };
 
-  const onDragEnd = () => {
+  const onDragEnd = (pointer: Phaser.Input.Pointer) => {
     if (piece.isSolved) return;
+    
+    // Check for Tap to Rotate
+    const dist = Phaser.Math.Distance.Between(startX, startY, pointer.x, pointer.y);
+    if (dist < TAP_THRESHOLD) {
+        piece.angle += 90;
+        audio.playClick();
+    }
+
     piece.setDepth(idleDepth);
     piece.setScale(1.0);
 
@@ -85,6 +101,8 @@ export function attachPieceInteraction(scene: Scene, piece: Piece, options: Piec
   const onPointerDown = (pointer: Phaser.Input.Pointer) => {
     if (piece.isSolved) return;
     piece.setDepth(dragDepth);
+    
+    // PC Right Click Rotation
     if (rotateRightClick && pointer.rightButtonDown()) {
       piece.angle += 90;
       audio.playClick();
@@ -120,5 +138,3 @@ export function detachPieceInteraction(piece: Piece): void {
 export function hasPieceInteraction(piece: Piece): boolean {
   return !!(piece as any)[INTERACTION_KEY];
 }
-
-
