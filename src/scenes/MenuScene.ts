@@ -26,7 +26,6 @@ export class MenuScene extends Scene {
     const nodeSize = 120;
     const gap = isMobile ? 140 : 150;
     const cols = isMobile ? Math.floor((width - 40) / gap) : 3;
-    const actualGridWidth = cols * gap - (gap - nodeSize); // approximate width of the grid content
     
     // Start Positions
     // Center grid horizontally
@@ -195,15 +194,6 @@ export class MenuScene extends Scene {
       bg.on('pointerout', () => bg.setStrokeStyle(4, 0x4ecdc4));
       
       // Level Number (Inside Box, Left)
-      const numBg = this.add.circle(20 - size/2 + 40, 40 - size/2 + 40, 15, 0xff6b6b); // Adjust offset relative to center (0,0) -> top-left is -size/2
-      // Actually container 0,0 is center. so top-left is -60, -60.
-      // previous code was 20, 40 which is inside relative to center? No, rectangle is center origin by default.
-      // Re-adjusting to relative coordinates.
-      
-      // Old code assumed (0,0) was center of rectangle.
-      // 20, 40 is actually bottom-right quadrant relative to center?
-      // Let's stick to standard offsets.
-      
       const offsetX = -size/2 + 20;
       const offsetY = -size/2 + 20;
 
