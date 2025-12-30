@@ -1,5 +1,6 @@
 import { AreaTool } from './AreaTool';
 import { PuzzleBoard } from '../board/PuzzleBoard';
+import { PocketFocusMode } from '../pocket/PocketFocusMode';
 
 export class CameraTool extends AreaTool {
   private onCapture: (payload: {
@@ -24,13 +25,66 @@ export class CameraTool extends AreaTool {
     this.onCapture = onCapture;
   }
 
+  // Override to hook into pointermove for spotlight effect
+  public onPointerMove(pointer: Phaser.Input.Pointer): void {
+    super.onPointerMove(pointer); // Does standard highlighting
+
+    // Update Spotlight in PocketFocusMode (if available)
+    const gameScene = this.scene as any; // Cast to access pocketFocusMode
+    const pocketFocusMode = gameScene.pocketFocusMode as PocketFocusMode | undefined;
+    
+    if (pocketFocusMode) {
+        // Calculate the selection rect (same logic as in highlightSelection)
+        const pieces = this.board.getPieces();
+        if (pieces.length === 0) return;
+        const pieceW = pieces[0].logicalWidth;
+        const pieceH = pieces[0].logicalHeight;
+        const container = this.board.getContainer();
+        const boardX = container.x;
+        const boardY = container.y;
+        const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
+        const relX = worldPoint.x - boardX;
+        const relY = worldPoint.y - boardY;
+
+        const centerCol = Math.floor(relX / pieceW);
+        const centerRow = Math.floor(relY / pieceH);
+        const rawStartCol = this.gridSize > 1 ? centerCol - Math.floor(this.gridSize / 2) : centerCol;
+        const rawStartRow = this.gridSize > 1 ? centerRow - Math.floor(this.gridSize / 2) : centerRow;
+
+        const maxCol = Math.max(...pieces.map((p) => p.gridCol));
+        const maxRow = Math.max(...pieces.map((p) => p.gridRow));
+        const maxStartCol = Math.max(0, maxCol - (this.gridSize - 1));
+        const maxStartRow = Math.max(0, maxRow - (this.gridSize - 1));
+        const startCol = Phaser.Math.Clamp(rawStartCol, 0, maxStartCol);
+        const startRow = Phaser.Math.Clamp(rawStartRow, 0, maxStartRow);
+
+        // Rect in world coords
+        const rectX = boardX + startCol * pieceW;
+        const rectY = boardY + startRow * pieceH;
+        const rectW = this.gridSize * pieceW;
+        const rectH = this.gridSize * pieceH;
+
+        // Activate spotlight if not already (this is safe to call repeatedly or if already active)
+        pocketFocusMode.enterCameraMode();
+        pocketFocusMode.updateSpotlight(rectX, rectY, rectW, rectH);
+    }
+  }
+
+  public deactivate(): void {
+      super.deactivate();
+      // Ensure we exit camera mode when tool is deactivated (e.g. cancel)
+      const gameScene = this.scene as any;
+      const pocketFocusMode = gameScene.pocketFocusMode as PocketFocusMode | undefined;
+      pocketFocusMode?.exitCameraMode();
+  }
+
   protected confirmSelection(pointer: Phaser.Input.Pointer): void {
     const pieces = this.board.getPieces();
     if (pieces.length === 0) return;
 
     const pieceW = pieces[0].logicalWidth;
     const pieceH = pieces[0].logicalHeight;
-
+    
     const container = this.board.getContainer();
     const boardX = container.x;
     const boardY = container.y;
@@ -91,7 +145,12 @@ export class CameraTool extends AreaTool {
     const cropW = Math.min(this.gridSize * pieceW, boardW - cropX);
     const cropH = Math.min(this.gridSize * pieceH, boardH - cropY);
     const crop = { x: cropX, y: cropY, w: cropW, h: cropH };
+    
+    // Exit camera mode upon successful capture
+    const gameScene = this.scene as any;
+    const pocketFocusMode = gameScene.pocketFocusMode as PocketFocusMode | undefined;
+    pocketFocusMode?.exitCameraMode();
+
     this.onCapture({ pieceLayout: layout, imageKey, crop, solvedIds });
   }
 }
-

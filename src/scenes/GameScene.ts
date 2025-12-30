@@ -63,6 +63,29 @@ export class GameScene extends Scene {
     this.puzzleBoard = new PuzzleBoard(this);
     this.puzzleBoard.initialize(levelId);
 
+    // --- Auto-Zoom & Camera Setup for Mobile Responsiveness ---
+    // Read WorldBounds from Board
+    const bounds = this.puzzleBoard.worldBounds;
+    // Set camera bounds to match virtual world
+    this.cameras.main.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+    // Center camera on the board initially
+    this.cameras.main.centerOn(bounds.centerX, bounds.centerY);
+    
+    // Calculate initial zoom to fit worldBounds (or at least board) within viewport
+    const viewportW = this.scale.width;
+    const viewportH = this.scale.height;
+    
+    // We want to fit the entire worldBounds if possible, or at least a good chunk.
+    const zoomX = viewportW / bounds.width;
+    const zoomY = viewportH / bounds.height;
+    // Use the smaller zoom to ensure fit, but clamp it to reasonable values
+    let initialZoom = Math.min(zoomX, zoomY);
+    // Don't zoom out too much (e.g. 0.2), nor zoom in too much (e.g. 1.5)
+    initialZoom = Phaser.Math.Clamp(initialZoom, 0.4, 1.2); 
+    
+    this.cameras.main.setZoom(initialZoom);
+    // -----------------------------------------------------------
+
     this.toolManager = new ToolManager(this);
     // Register Tools
     this.toolManager.addTool('AREA_3X3', new AreaTool(this, this.puzzleBoard, 3));

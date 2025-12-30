@@ -22,8 +22,8 @@ export class UIScene extends Scene {
   private pocketPuzzleBtnEl: HTMLButtonElement | null = null;
   private pocketCameraBtnEl: HTMLButtonElement | null = null;
   private activePocketIdx: number = 0;
-  private pocketCapturePending: boolean = false;
-  private pocketCameraHoldActive: boolean = false;
+  // REMOVED: private pocketCapturePending: boolean = false;
+  // REMOVED: private pocketCameraHoldActive: boolean = false;
 
   private readonly onPiecePlacedUpdatePocketCamera = () => this.updatePocketCameraButton();
   private readonly onPocketCameraBlocked = (payload?: { pocketIndex?: number }) => {
@@ -307,75 +307,28 @@ export class UIScene extends Scene {
     this.pocketCameraBtnEl.textContent = canTake ? 'Tomar foto (4x4)' : 'Tomar foto (4x4) (resuelve la zona)';
   }
 
-  private startPocketCameraHold(ev: MouseEvent) {
-    ev.stopPropagation();
-    ev.preventDefault?.();
-    if (this.pocketCameraHoldActive) return;
-
+  // --- NEW: Toggle Spotlight Camera Mode ---
+  private togglePocketCamera() {
     const gameScene = this.scene.get('GameScene');
     if (!gameScene) return;
 
-    // Restricción: 1 foto por bolsillo hasta resolver completamente el área fotografiada.
+    // Si ya hay una captura pendiente o estamos en modo cámara, podríamos querer cancelar?
+    // Pero aquí simplificamos: el botón activa el modo cámara (spotlight).
+    // La herramienta CameraTool se encarga de la interacción.
+    
     const canTake =
       typeof (gameScene as any)?.canTakePocketPhoto === 'function'
         ? !!(gameScene as any).canTakePocketPhoto(this.activePocketIdx)
         : true;
+        
     if (!canTake) {
       this.updatePocketCameraButton();
       return;
     }
 
-    this.pocketCameraHoldActive = true;
-    this.pocketCapturePending = true;
-
-    // Cierra el modo bolsillo pero mantiene el flujo para reabrir al capturar o cancelar
-    this.closePocket(true);
+    // NO cerramos el bolsillo. Simplemente activamos la herramienta.
+    // El PocketFocusMode se encargará de mostrar el spotlight.
     gameScene.events.emit('activate-pocket-camera');
-
-    let finished = false;
-    const cleanup = () => {
-      window.removeEventListener('mouseup', onWindowMouseUp);
-      gameScene.events.off('pocket-template-captured', onCaptured);
-      gameScene.events.off('pocket-camera-cancelled', onCancelled);
-      this.pocketCameraHoldActive = false;
-    };
-
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      if (!this.pocketCapturePending) {
-        cleanup();
-        return;
-      }
-      this.pocketCapturePending = false;
-      // Reabrir el bolsillo activo después de capturar o cancelar
-      this.openPocket(this.activePocketIdx);
-      gameScene.events.emit('cancel-pocket-camera');
-      cleanup();
-    };
-
-    const onCaptured = () => finish();
-    const onCancelled = () => finish();
-
-    // Éxito: capturó (mouseup dentro del tablero)
-    gameScene.events.once('pocket-template-captured', onCaptured);
-    // Cancelación: mouseup fuera del tablero (emitido por CameraTool)
-    gameScene.events.once('pocket-camera-cancelled', onCancelled);
-
-    // Fallback: mouseup fuera del canvas (Phaser puede no recibir pointerup)
-    const onWindowMouseUp = (e: MouseEvent) => {
-      if (finished) return;
-      const rect = this.game.canvas.getBoundingClientRect();
-      const insideCanvas =
-        e.clientX >= rect.left &&
-        e.clientX <= rect.right &&
-        e.clientY >= rect.top &&
-        e.clientY <= rect.bottom;
-      if (insideCanvas) return; // Phaser manejará el pointerup
-      gameScene.events.emit('pocket-camera-cancelled');
-    };
-
-    window.addEventListener('mouseup', onWindowMouseUp, { once: true });
   }
 
   updateProgress() {
@@ -403,8 +356,8 @@ export class UIScene extends Scene {
     this.stopRevealCountdown();
     this.stopTimerInterval();
     this.pocketButtons = [];
-    this.pocketCapturePending = false;
-    this.pocketCameraHoldActive = false;
+    // REMOVED: this.pocketCapturePending = false;
+    // REMOVED: this.pocketCameraHoldActive = false;
     this.pocketCameraBtnEl = null;
   }
 
@@ -665,7 +618,11 @@ export class UIScene extends Scene {
     btnCamera.className = 'btn btn-secondary btn-compact';
     btnCamera.textContent = 'Tomar foto (4x4)';
     preventProp(btnCamera);
-    btnCamera.onmousedown = (e) => this.startPocketCameraHold(e);
+    // Cambiado: Click simple para toggle (ya no hold)
+    btnCamera.onclick = (e) => {
+        e.stopPropagation();
+        this.togglePocketCamera();
+    };
     this.pocketCameraBtnEl = btnCamera;
     this.updatePocketCameraButton();
 
@@ -715,7 +672,7 @@ export class UIScene extends Scene {
 
   private closePocket(keepCapture: boolean = false) {
     if (!keepCapture) {
-      this.pocketCapturePending = false;
+      // REMOVED: this.pocketCapturePending = false;
       const gameScene = this.scene.get('GameScene');
       gameScene.events.emit('cancel-pocket-camera');
     }

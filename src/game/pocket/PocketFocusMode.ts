@@ -75,6 +75,10 @@ export class PocketFocusMode {
   private revealGroup?: Phaser.GameObjects.Group;
   private baselineCaptured: boolean = false;
 
+  // Camera Spotlight State
+  private isCameraMode = false;
+  private spotlightOverlay?: Phaser.GameObjects.Graphics;
+
   // State to restore
   private hiddenPieces: Piece[] = [];
   private pocketPieces: Piece[] = [];
@@ -93,15 +97,10 @@ export class PocketFocusMode {
     }
   >();
 
-  // Paleta consistente con el tablero principal
-  // Mantener el mismo color que piezas no resueltas (evitar diferencias visuales).
   private readonly solvedTint = 0xffffff;
   private readonly vividTint = 0xffffff;
   private readonly guideSolvedAlpha = 0.55;
-  // La "foto" del bolsillo se representa como guías fantasma. Si la tintamos gris + alpha bajo,
-  // se percibe demasiado apagada vs la guía del tablero principal (~0.3).
   private readonly guideUnsolvedAlpha = 0.4;
-  // 0xffffff = sin tint (evita oscurecer por multiplicación de color)
   private readonly guideUnsolvedTint = 0xffffff;
 
   constructor(scene: Phaser.Scene, board: PuzzleBoard, pocketManager: PocketManager) {
@@ -135,19 +134,24 @@ export class PocketFocusMode {
   public refresh() {
     if (this.openPocketIdx === null) return;
     this.destroyReveal16();
+    // Re-apply visibility. If in camera mode, this logic might need adjustment?
+    // Actually, refresh is called when pieces move in/out of pocket.
+    // If we are in camera mode, we likely want to exit it or stay in it.
+    // Let's assume refresh keeps standard pocket mode.
     this.applyVisibilityAndInteraction(false);
     this.renderReveal16();
+    
+    // If we were in camera mode, re-apply overlay if needed
+    if (this.isCameraMode) {
+        // actually if pieces changed, we should probably update spotlight overlay if needed
+        // but camera mode is "modal" usually.
+    }
   }
 
-  /**
-   * Si una pieza se devolvió al tablero principal mientras el modo bolsillo está activo,
-   * no debemos restaurarla al estado base (normalmente invisible porque estaba stashed).
-   */
   public excludePieceFromRestore(pieceId: number) {
     this.prevPieceState.delete(pieceId);
   }
 
-  /** Marca una pieza como devuelta al tablero principal durante el modo bolsillo. */
   public markPieceReleasedToWorld(pieceId: number) {
     this.releasedToWorld.add(pieceId);
     this.excludePieceFromRestore(pieceId);
@@ -156,6 +160,11 @@ export class PocketFocusMode {
   public close() {
     if (this.openPocketIdx === null) return;
 
+    // Exit camera mode if active
+    if (this.isCameraMode) {
+        this.exitCameraMode();
+    }
+
     // Restore pieces
     const pieces = this.board.getPieces();
     for (const piece of pieces) {
@@ -163,7 +172,6 @@ export class PocketFocusMode {
       const prev = this.prevPieceState.get(id);
       if (!prev) continue;
 
-      // Restaurar layer del tablero si la movimos al overlay
       if (this.movedToOverlay.has(id)) {
         this.board.restorePieceLayer(piece);
       }
@@ -175,15 +183,12 @@ export class PocketFocusMode {
       piece.setTint(prev.tintTopLeft);
 
       if (prev.interactive) {
-        // Restore normal board interaction
         this.board.enablePieceInteraction(piece);
       } else {
         piece.disableInteractive();
       }
     }
 
-    // Piezas devueltas al tablero durante el modo bolsillo:
-    // no se restauran por baseline (estaban stashed), así que las mostramos/activamos aquí.
     for (const id of this.releasedToWorld) {
       const piece = pieces[id];
       if (!piece) continue;
@@ -223,8 +228,6 @@ export class PocketFocusMode {
     const hasTemplate = !!pocket.template;
 
     const pieces = this.board.getPieces();
-    // Bounds dinámico basado en la cámara: permite zoom/pan sin “romper” el movimiento.
-    // Damos un margen para poder maniobrar piezas de borde.
     const boundsProvider = () => {
       const cam = this.scene.cameras.main;
       const vw = cam.worldView;
@@ -233,12 +236,10 @@ export class PocketFocusMode {
       return new Phaser.Geom.Rectangle(vw.x - padX, vw.y - padY, vw.width + padX * 2, vw.height + padY * 2);
     };
 
-    // Recalcular por refresh (evita acumulación)
     this.hiddenPieces = [];
     this.pocketPieces = [];
 
     pieces.forEach((piece, id) => {
-      // Guardar estado base SOLO una vez al entrar al modo bolsillo.
       if (captureBaseline && !this.baselineCaptured && !this.prevPieceState.has(id)) {
         this.prevPieceState.set(id, {
           visible: piece.visible,
@@ -253,19 +254,15 @@ export class PocketFocusMode {
 
       const isPocketPiece = pocketIds.has(id);
       if (isPocketPiece) {
-        // Importante: sacar la pieza de las Layers normales a overlayLayer.
-        // Si no, el depth del sprite se ignora y puede quedar por debajo de la guía, pareciendo “transparente”.
         this.board.movePieceToOverlay(piece);
         this.movedToOverlay.add(id);
 
-        // Mostrar y permitir interacción solo a piezas del bolsillo
         piece.setVisible(true);
         piece.isSolved = false;
         piece.setTint(this.vividTint);
         piece.setAlpha(1);
         piece.setScrollFactor(1);
 
-        // Interacción del bolsillo: clamp al tablero + snap restringido al 4x4
         detachPieceInteraction(piece);
         attachPieceInteraction(this.scene, piece, {
           snapSystem: this.snapSystem,
@@ -282,25 +279,18 @@ export class PocketFocusMode {
         return;
       }
 
-      // Si una pieza ya no pertenece al bolsillo pero estaba en overlay, restaurar su layer normal.
       if (this.movedToOverlay.has(id)) {
         this.board.restorePieceLayer(piece);
         this.movedToOverlay.delete(id);
       }
 
-      // Si fue devuelta al tablero principal durante el modo bolsillo:
-      // - En el modo bolsillo NO se muestra (igual que otras piezas fuera del bolsillo)
-      // - Al cerrar, se mostrará/activará en `close()`.
       if (this.releasedToWorld.has(id)) {
         piece.setVisible(false);
         piece.disableInteractive();
         return;
       }
 
-      // No-pocket pieces: mostrar solo las resueltas, ocultar las no resueltas
       if (piece.isSolved) {
-        // En modo bolsillo con foto: mostrar solo las resueltas dentro del 4x4 fotografiado.
-        // Sin foto: ocultar también las resueltas (no hay área enfocada).
         const shouldShowSolved = hasTemplate ? templateIds.has(id) : false;
         piece.setVisible(shouldShowSolved);
         piece.disableInteractive();
@@ -339,11 +329,9 @@ export class PocketFocusMode {
       ghost.setAngle(0);
 
       if (piece.isSolved) {
-        // Guía: resueltas un poco más vivas (pero sigue siendo guía)
         ghost.setAlpha(this.guideSolvedAlpha);
         ghost.setTint(this.solvedTint);
       } else {
-        // Guía: no resueltas más opacas
         ghost.setAlpha(this.guideUnsolvedAlpha);
         ghost.setTint(this.guideUnsolvedTint);
       }
@@ -352,7 +340,80 @@ export class PocketFocusMode {
     });
   }
 
-  // (helper removido) ya no usamos bounds basados en tablero, sino en cámara (worldView).
+  // --- SPOTLIGHT CAMERA MODE ---
+  // Muestra el tablero completo oscurecido, excepto un área (la cámara)
+  // Permite al usuario "ver" dónde está tomando la foto sin salir del contexto visual del bolsillo.
+
+  public enterCameraMode() {
+    if (this.isCameraMode) return;
+    this.isCameraMode = true;
+
+    // 1. Mostrar temporalmente TODAS las piezas del tablero (incluso las ocultas) para que se vea qué fotografiar
+    //    Las piezas del bolsillo se mantienen visibles encima (ya están en overlay)
+    const pieces = this.board.getPieces();
+    pieces.forEach(p => {
+        if (!this.pocketPieces.includes(p) && !this.releasedToWorld.has(pieces.indexOf(p))) {
+            p.setVisible(true);
+            // Hacerlas un poco más oscuras para resaltar que son "fondo"? 
+            // O dejarlas normal y el overlay se encarga.
+            // p.setAlpha(0.5); 
+        }
+    });
+
+    // 2. Crear Overlay Oscuro
+    // Usamos un Graphics gigante que cubre todo el WorldBounds
+    const bounds = this.board.worldBounds;
+    this.spotlightOverlay = this.scene.add.graphics();
+    this.spotlightOverlay.fillStyle(0x000000, 0.7);
+    this.spotlightOverlay.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    this.spotlightOverlay.setDepth(2000); // Muy arriba
+
+    // 3. Crear Máscara (Spotlight)
+    // Phaser Geometry Mask: Usamos otro Graphics para definir qué SE VE.
+    // Invertido: Queremos ver lo que está DENTRO del cuadrado, el resto oscuro.
+    // Espera, la técnica común es: Overlay negro con agujero. 
+    // O Overlay negro con alpha sobre todo, y "recortar" el agujero.
+    // Phaser mask funciona "mostrando" lo que está bajo la máscara.
+    // Si queremos oscurecer todo MENOS el cuadrado, necesitamos una máscara INVERTIDA 
+    // o dibujar el overlay negro como 4 rectángulos alrededor del hueco.
+    // Dibujar 4 rectángulos es más fácil y performante que máscaras invertidas complejas.
+    this.updateSpotlight(0, 0, 0, 0); // Start hidden/empty
+  }
+
+  public updateSpotlight(x: number, y: number, w: number, h: number) {
+    if (!this.isCameraMode || !this.spotlightOverlay) return;
+
+    // Redraw overlay as 4 rectangles around the "hole"
+    this.spotlightOverlay.clear();
+    this.spotlightOverlay.fillStyle(0x000000, 0.7);
+
+    const bounds = this.board.worldBounds;
+
+    // Top
+    this.spotlightOverlay.fillRect(bounds.x, bounds.y, bounds.width, y - bounds.y);
+    // Bottom
+    this.spotlightOverlay.fillRect(bounds.x, y + h, bounds.width, bounds.bottom - (y + h));
+    // Left
+    this.spotlightOverlay.fillRect(bounds.x, y, x - bounds.x, h);
+    // Right
+    this.spotlightOverlay.fillRect(x + w, y, bounds.right - (x + w), h);
+    
+    // Border for the spotlight
+    this.spotlightOverlay.lineStyle(2, 0xffe66d, 1);
+    this.spotlightOverlay.strokeRect(x, y, w, h);
+  }
+
+  public exitCameraMode() {
+    if (!this.isCameraMode) return;
+    this.isCameraMode = false;
+
+    if (this.spotlightOverlay) {
+        this.spotlightOverlay.destroy();
+        this.spotlightOverlay = undefined;
+    }
+
+    // Restaurar visibilidad normal del modo bolsillo (ocultar lo que no es bolsillo/resuelto-en-foto)
+    // Llamamos a refresh() o reaplicamos applyVisibility
+    this.applyVisibilityAndInteraction(false);
+  }
 }
-
-

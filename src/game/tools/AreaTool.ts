@@ -102,10 +102,13 @@ export class AreaTool extends SelectionTool {
              const rad = Phaser.Math.DegToRad(deg);
              const cx = centerSelX + Math.cos(rad) * r;
              const cy = centerSelY + Math.sin(rad) * r;
-             // keep inside screen margins
+             
+             // keep inside World Bounds (not just screen)
+             const bounds = this.board.worldBounds;
              const margin = 50;
-             const cxClamped = Phaser.Math.Clamp(cx, margin, this.scene.scale.width - margin);
-             const cyClamped = Phaser.Math.Clamp(cy, margin, this.scene.scale.height - margin);
+             const cxClamped = Phaser.Math.Clamp(cx, bounds.x + margin, bounds.right - margin);
+             const cyClamped = Phaser.Math.Clamp(cy, bounds.y + margin, bounds.bottom - margin);
+             
              const insideSel = cxClamped >= selRect.x && cxClamped <= selRect.x + selRect.w && cyClamped >= selRect.y && cyClamped <= selRect.y + selRect.h;
              if (!insideSel && isFree(cxClamped, cyClamped)) {
                targetX = cxClamped;
@@ -131,9 +134,10 @@ export class AreaTool extends SelectionTool {
              targetX = centerX + (vecX / len) * pushDist;
              targetY = centerY + (vecY / len) * pushDist;
            }
+           const bounds = this.board.worldBounds;
            const margin = 50;
-           targetX = Phaser.Math.Clamp(targetX, margin, this.scene.scale.width - margin);
-           targetY = Phaser.Math.Clamp(targetY, margin, this.scene.scale.height - margin);
+           targetX = Phaser.Math.Clamp(targetX, bounds.x + margin, bounds.right - margin);
+           targetY = Phaser.Math.Clamp(targetY, bounds.y + margin, bounds.bottom - margin);
          }
 
          // Animation
@@ -169,4 +173,3 @@ export class AreaTool extends SelectionTool {
          this.scene.events.emit('request-save');
     }
 }
-

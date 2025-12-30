@@ -20,6 +20,9 @@ export class PuzzleBoard {
     public boardWidth: number = 0;
     public boardHeight: number = 0;
     
+    // Virtual World Bounds (Game Area)
+    public worldBounds: Phaser.Geom.Rectangle = new Phaser.Geom.Rectangle(0, 0, 0, 0);
+
     constructor(scene: Scene) {
         this.scene = scene;
         this.splitter = new ImageSplitter(scene);
@@ -46,14 +49,23 @@ export class PuzzleBoard {
         this.boardWidth = img.width;
         this.boardHeight = img.height;
 
+        // Setup World Bounds
+        // Define margins (e.g. 250px on each side for scattered pieces)
+        const margin = 250;
+        const totalW = this.boardWidth + margin * 2;
+        const totalH = this.boardHeight + margin * 2;
+        
+        // Center the world bounds conceptually at (0,0) or some offset?
+        // Let's place the board in the center of the world bounds
+        this.worldBounds = new Phaser.Geom.Rectangle(0, 0, totalW, totalH);
+
         // Setup Board UI
         this.setupBoardUI(imageKey);
         
-        // Center container
-        this.boardContainer.setPosition(
-            (this.scene.scale.width - this.boardWidth) / 2, 
-            (this.scene.scale.height - this.boardHeight) / 2
-        );
+        // Position Board Container in center of World Bounds
+        this.boardContainer.setPosition(margin, margin);
+        
+        // Initial Camera Setup will be done by GameScene, reading this.worldBounds
     }
 
     private setupBoardUI(imageKey: string): void {
@@ -147,11 +159,6 @@ export class PuzzleBoard {
     }
 
     private scatterPiece(piece: Piece): void {
-        const scrW = this.scene.scale.width;
-        const scrH = this.scene.scale.height;
-        
-        // Define simple scatter logic or reuse the one from GameScene
-        // Reusing Logic:
         const boardRect = new Phaser.Geom.Rectangle(
             this.boardContainer.x,
             this.boardContainer.y,
@@ -159,37 +166,50 @@ export class PuzzleBoard {
             this.boardHeight
         );
 
-        const margin = 80; 
+        const bounds = this.worldBounds;
+        const margin = 20; 
+
+        // Scatter in margins (Top, Right, Bottom, Left)
+        // Valid zones within worldBounds but outside boardRect
         const validZones = [];
-        if (boardRect.top > margin) validZones.push(0);
-        if (scrW - boardRect.right > margin) validZones.push(1);
-        if (scrH - boardRect.bottom > margin) validZones.push(2);
-        if (boardRect.left > margin) validZones.push(3);
+        
+        // Top Margin
+        if (boardRect.top - bounds.top > 50) validZones.push(0);
+        // Right Margin
+        if (bounds.right - boardRect.right > 50) validZones.push(1);
+        // Bottom Margin
+        if (bounds.bottom - boardRect.bottom > 50) validZones.push(2);
+        // Left Margin
+        if (boardRect.left - bounds.left > 50) validZones.push(3);
 
         const zone = validZones.length > 0 
             ? Phaser.Math.RND.pick(validZones) 
             : Phaser.Math.Between(0, 3);
 
-        let minX = 0, maxX = scrW, minY = 0, maxY = scrH;
+        let minX = bounds.x + margin, maxX = bounds.right - margin;
+        let minY = bounds.y + margin, maxY = bounds.bottom - margin;
 
         switch (zone) {
             case 0: // Top
-                minX = 50; maxX = scrW - 50; minY = 50; maxY = boardRect.top - 50;
+                minY = bounds.y + margin; 
+                maxY = boardRect.top - margin;
                 break;
             case 1: // Right
-                minX = boardRect.right + 50; maxX = scrW - 50; minY = 50; maxY = scrH - 50;
+                minX = boardRect.right + margin; 
+                maxX = bounds.right - margin;
                 break;
             case 2: // Bottom
-                minX = 50; maxX = scrW - 50; minY = boardRect.bottom + 50; maxY = scrH - 50;
+                minY = boardRect.bottom + margin; 
+                maxY = bounds.bottom - margin;
                 break;
             case 3: // Left
-                minX = 50; maxX = boardRect.left - 50; minY = 50; maxY = scrH - 50;
+                minX = bounds.x + margin; 
+                maxX = boardRect.left - margin;
                 break;
         }
         
-        if (minX > maxX || minY > maxY) {
-            minX = 0; maxX = scrW; minY = 0; maxY = scrH;
-        }
+        if (minX > maxX) minX = maxX;
+        if (minY > maxY) minY = maxY;
 
         piece.x = Phaser.Math.Between(minX, maxX);
         piece.y = Phaser.Math.Between(minY, maxY);
@@ -258,4 +278,3 @@ export class PuzzleBoard {
         };
     }
 }
-
