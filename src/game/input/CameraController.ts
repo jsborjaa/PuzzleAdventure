@@ -4,8 +4,9 @@ export class CameraController {
     private scene: Scene;
     private enabled: boolean = true;
     private activePointers: Map<number, { isPanAllowed: boolean }> = new Map();
-    private initialPinchDistance: number | null = null;
-    private initialZoom: number = 1;
+    // Pinch state
+    private prevPinchDistance: number | null = null;
+    private prevPinchCenter: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
 
     constructor(scene: Scene) {
         this.scene = scene;
@@ -19,7 +20,7 @@ export class CameraController {
         this.enabled = enabled;
         if (!enabled) {
             this.activePointers.clear();
-            this.initialPinchDistance = null;
+            this.prevPinchDistance = null;
         }
     }
 
@@ -42,21 +43,13 @@ export class CameraController {
         const isPanAllowed = gameObjects.length === 0;
         this.activePointers.set(pointer.id, { isPanAllowed });
 
-        // Check for 2-finger pinch start
-        if (this.scene.input.pointer1.isDown && this.scene.input.pointer2.isDown) {
-            this.initialPinchDistance = Phaser.Math.Distance.Between(
-                this.scene.input.pointer1.x, this.scene.input.pointer1.y,
-                this.scene.input.pointer2.x, this.scene.input.pointer2.y
-            );
-            this.initialZoom = this.scene.cameras.main.zoom;
-        }
+        // Reset pinch state if number of pointers changes
+        this.prevPinchDistance = null;
     }
 
     private onPointerUp(pointer: Phaser.Input.Pointer) {
         this.activePointers.delete(pointer.id);
-        if (this.activePointers.size < 2) {
-            this.initialPinchDistance = null;
-        }
+        this.prevPinchDistance = null;
     }
 
     private onPointerMove(pointer: Phaser.Input.Pointer) {
@@ -69,19 +62,39 @@ export class CameraController {
              return;
         }
 
-        // 2 Fingers: Pinch Zoom
+        // 2 Fingers: Pinch Zoom & Pan
         if (this.scene.input.pointer1.isDown && this.scene.input.pointer2.isDown) {
             const p1 = this.scene.input.pointer1;
             const p2 = this.scene.input.pointer2;
             
             const currentDistance = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
-            
-            if (this.initialPinchDistance && this.initialPinchDistance > 0) {
-                const scale = currentDistance / this.initialPinchDistance;
-                const newZoom = Phaser.Math.Clamp(this.initialZoom * scale, 0.5, 2);
+            const currentCenter = new Phaser.Math.Vector2((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+
+            if (this.prevPinchDistance && this.prevPinchDistance > 0) {
+                // 1. Calculate and Apply Zoom
+                // Factor relative to previous frame (incremental zoom)
+                const zoomFactor = currentDistance / this.prevPinchDistance;
+                const oldZoom = this.scene.cameras.main.zoom;
+                const newZoom = Phaser.Math.Clamp(oldZoom * zoomFactor, 0.2, 3); // Allow wider range
                 this.scene.cameras.main.setZoom(newZoom);
+
+                // 2. Adjust Camera Position (Pivot Zoom)
+                // When zooming, we want the point under the pinch center to stay stationary (mostly).
+                // However, Phaser zooms towards the camera center.
+                // We need to offset the camera to compensate for the shift of the pinch center.
+                
+                // Simpler approach for now: Just Pan based on center movement
+                // This allows moving the map while pinching
+                const dx = currentCenter.x - this.prevPinchCenter.x;
+                const dy = currentCenter.y - this.prevPinchCenter.y;
+                
+                // Also, dragging with two fingers should pan
+                this.panCamera(dx, dy);
             }
-            // Note: We skip panning during pinch to keep it stable
+
+            // Update state for next frame
+            this.prevPinchDistance = currentDistance;
+            this.prevPinchCenter.copy(currentCenter);
             return;
         }
 
@@ -104,7 +117,7 @@ export class CameraController {
     private onWheel(_pointer: any, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) {
         if (!this.enabled) return;
         const zoom = this.scene.cameras.main.zoom - deltaY * 0.001;
-        this.scene.cameras.main.setZoom(Phaser.Math.Clamp(zoom, 0.5, 2));
+        this.scene.cameras.main.setZoom(Phaser.Math.Clamp(zoom, 0.2, 3));
     }
     
     public destroy(): void {
