@@ -13,6 +13,12 @@
   touch-action: none;
 }
 
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -24,7 +30,8 @@ body {
 
 #app {
   width: 100vw;
-  height: 100vh;
+  height: 100vh; /* fallback */
+  height: 100dvh; /* mobile: tamaño real del viewport visible (mejor en landscape) */
   position: relative;
   display: flex;
   justify-content: center;
@@ -38,6 +45,12 @@ body {
   width: 100%;
   height: 100%;
   z-index: 1;
+}
+
+#game-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
 }
 
 #ui-layer {
