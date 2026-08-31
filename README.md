@@ -1,52 +1,42 @@
 # Puzzle Adventure
 
-Juego de rompecabezas móvil construido con Phaser 3, TypeScript y Vite.
+Portrait jigsaw for phones (Android first, iOS-ready): Phaser 3, TypeScript, Vite, Capacitor.
 
-## Demo (GitHub Pages)
+The full product + architecture reference (flows, storage, invariants, backlog) is **[docs/GAME.md](docs/GAME.md)**. Read that before changing gameplay, persistence, or HUD.
 
-- **URL**: `https://jsborjaa.github.io/PuzzleAdventure/`
+## Web
 
-## Estructura del Proyecto
+```bash
+npm install
+npm run dev
+```
 
-- `src/core`: Configuración del juego.
-- `src/scenes`: Escenas (Boot, Menu, Game, UI).
-- `src/objects`: Entidades de juego (Piece).
-- `src/services`: Lógica de negocio (ImageSplitter, AudioService).
-- `src/ui`: Elementos HTML/CSS.
+```bash
+npm test
+npm run build
+```
 
-## Instalación y Ejecución
+Dev server: `http://localhost:5173/`. After replacing files in `public/`, hard-refresh.
 
-1. Instalar dependencias:
-   ```bash
-   npm install
-   ```
+## Android
 
-2. Ejecutar en modo desarrollo:
-   ```bash
-   npm run dev
-   ```
+Needs Android Studio / SDK. App id: `com.puzzleadventure.app`.
 
-3. Abrir el navegador en la URL mostrada (generalmente http://localhost:5173).
+```bash
+npm run android
+```
 
-## Controles
+Or `npx cap open android` after `npm run cap:sync`.
 
-- **Arrastrar**: Mover piezas.
-- **Click Derecho**: Rotar pieza.
-- **Rueda del Ratón**: Zoom en el tablero.
-- **Arrastrar Fondo**: Mover cámara.
+## iOS (later, Mac + Xcode)
 
-## Arquitectura
+```bash
+npx cap add ios
+npm run build
+npx cap sync
+npx cap open ios
+```
 
-El juego utiliza una arquitectura híbrida:
-- **Phaser (Canvas/WebGL)**: Renderizado de alto rendimiento para las piezas y el tablero.
-- **DOM (HTML/CSS)**: Interfaz de usuario (HUD) superpuesta para mayor nitidez y accesibilidad.
-- **Servicios**: `ImageSplitter` (generación de piezas) y `AudioService` (sonido procedural) desacoplados de las escenas.
+## Play (short)
 
-## Próximos Pasos (Mobile)
-
-Para exportar a Android/iOS:
-1. Instalar Capacitor: `npm install @capacitor/core @capacitor/cli`
-2. Inicializar: `npx cap init`
-3. Build: `npm run build`
-4. Sync: `npx cap add android`
-
+Drag pieces, tap to rotate, pinch to zoom, pan empty space. Hold **View** to peek. Bottom bar: reveal, Area / sArea, Hint. Completed levels open assembled; **Scatter and play** (localized) scatters again. Language picker is on the menu. Details in [docs/GAME.md](docs/GAME.md).

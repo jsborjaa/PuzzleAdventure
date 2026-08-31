@@ -8,9 +8,6 @@ dist-ssr/
 # Vite / tooling
 .vite/
 
-# Cursor / IDE
-.cursor/
-
 # Logs
 npm-debug.log*
 yarn-debug.log*
@@ -24,5 +21,3 @@ Thumbs.db
 # Env
 .env
 .env.*
-
-
