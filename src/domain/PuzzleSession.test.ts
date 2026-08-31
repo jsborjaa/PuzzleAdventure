@@ -28,6 +28,15 @@ describe('PuzzleSession', () => {
     expect(session.getPieces().every((p) => !p.isSolved)).toBe(true);
     const moved = session.getPieces().filter((p) => p.x !== p.correctX || p.y !== p.correctY);
     expect(moved.length).toBeGreaterThan(0);
+    const { board } = session.bounds;
+    for (const piece of session.getPieces()) {
+      const onBoard =
+        piece.x >= board.x &&
+        piece.x <= board.x + board.width &&
+        piece.y >= board.y &&
+        piece.y <= board.y + board.height;
+      expect(onBoard).toBe(false);
+    }
   });
 
   it('places a piece through the single snap path and wins', () => {

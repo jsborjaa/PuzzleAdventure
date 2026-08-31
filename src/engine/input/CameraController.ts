@@ -8,7 +8,7 @@ export class CameraController {
 
   constructor(private scene: Phaser.Scene) {
     this.scene.input.addPointer(1);
-    this.scene.cameras.main.setBackgroundColor('#2f3542');
+    this.scene.cameras.main.setBackgroundColor('#6ec8ff');
     this.scene.input.on('pointerdown', this.onPointerDown, this);
     this.scene.input.on('pointerup', this.onPointerUp, this);
     this.scene.input.on('pointerupoutside', this.onPointerUp, this);

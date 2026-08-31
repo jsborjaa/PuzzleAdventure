@@ -44,7 +44,7 @@ async function applyNativeChrome() {
     if (!Capacitor.isNativePlatform()) return;
     const { StatusBar, Style } = await import('@capacitor/status-bar');
     await StatusBar.setStyle({ style: Style.Dark });
-    await StatusBar.setBackgroundColor({ color: '#2f3542' });
+    await StatusBar.setBackgroundColor({ color: '#6ec8ff' });
   } catch {
     // Web, or plugin unavailable.
   }

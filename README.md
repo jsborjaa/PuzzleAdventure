@@ -39,4 +39,4 @@ npx cap open ios
 
 ## Play (short)
 
-Drag pieces, tap to rotate, pinch to zoom, pan empty space. Hold **View** to peek. Bottom bar: reveal, Area / sArea, Hint. Completed levels open assembled; **Scatter and play** (localized) scatters again. Language picker is on the menu. Details in [docs/GAME.md](docs/GAME.md).
+Drag pieces, tap to rotate, pinch to zoom, pan empty space. Hub: Map / Events / Store / Workshop. Hold **Peek** in a level. Round tools: Infinite, 20s, Area, sArea, Hint. Completed levels open assembled; **Scatter and play** scatters again. Language is in Settings. Details in [docs/GAME.md](docs/GAME.md).

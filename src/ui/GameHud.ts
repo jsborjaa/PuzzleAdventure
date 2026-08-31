@@ -3,6 +3,7 @@ import type { PowerupKey, ToolId } from '../domain/product';
 import { packEntries, packHasItems, type PowerupPack } from '../domain/powerups';
 import { PuzzleSession } from '../domain/PuzzleSession';
 import { t } from '../i18n';
+import { iconHtml, type IconName } from './icons';
 import { powerupName } from './powerupLabel';
 
 export interface HudCallbacks {
@@ -37,7 +38,7 @@ export class GameHud {
     const top = el('div', 'hud-top');
     const bottom = el('div', 'hud-bottom');
 
-    const menu = button(t('hud.menu'), 'btn', () => this.callbacks.onExitToMenu());
+    const menu = roundButton('map', t('hud.map'), 'btn-coral', () => this.callbacks.onExitToMenu());
     const progress = el('div', 'progress-bar-container');
     this.progressFill = el('div', 'progress-bar-fill');
     progress.appendChild(this.progressFill);
@@ -46,11 +47,11 @@ export class GameHud {
     this.revealCountdown = el('div', 'reveal-timer');
     this.revealCountdown.style.display = 'none';
     const mid = el('div', 'hud-top-mid');
-    const times = el('div', 'hud-times');
-    times.append(this.timerLabel, this.bestLabel);
-    mid.append(progress, times, this.revealCountdown);
+    const times = el('div', 'hud-times hud-glass');
+    times.append(this.timerLabel, this.bestLabel, this.revealCountdown);
+    mid.append(progress, times);
 
-    const eye = button(t('hud.peek'), 'btn btn-secondary');
+    const eye = roundButton('peek', t('hud.peek'), 'btn-mint');
     const hold = (on: boolean) => (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
@@ -62,19 +63,14 @@ export class GameHud {
     eye.addEventListener('pointercancel', hold(false));
     top.append(menu, mid, eye);
 
-    const perm = this.powerup(t('hud.revealPerm'), 'reveal_perm', () => this.session.togglePermanentReveal());
-    const temp = this.powerup(t('hud.revealTemp'), 'reveal_temp', () => {
+    const perm = this.powerup('reveal_perm', () => this.session.togglePermanentReveal());
+    const temp = this.powerup('reveal_temp', () => {
       if (this.session.activateTemporaryReveal()) this.startRevealCountdown(20);
     });
-    const area = this.toolButton(t('hud.area'), 'area');
-    const sarea = this.toolButton(t('hud.sarea'), 'sarea');
-    const hint = this.toolButton(t('hud.hint'), 'hint');
+    const area = this.toolButton('area');
+    const sarea = this.toolButton('sarea');
+    const hint = this.toolButton('hint');
     bottom.append(perm, temp, area, sarea, hint);
-    if (import.meta.env.DEV) {
-      const resetPu = button(t('hud.resetPu'), 'btn btn-ghost', () => this.session.resetPowerups());
-      resetPu.title = t('hud.resetPuHint');
-      bottom.append(resetPu);
-    }
 
     this.setupUpgrade(area, sarea, () => this.session.upgradeArea());
     this.setupUpgrade(temp, perm, () => this.session.upgradeReveal());
@@ -116,8 +112,8 @@ export class GameHud {
     this.root.innerHTML = '';
   }
 
-  private powerup(label: string, key: PowerupKey, onClick: () => void) {
-    const btn = this.badgeButton(label, key);
+  private powerup(key: PowerupKey, onClick: () => void) {
+    const btn = this.badgeButton(key);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       onClick();
@@ -125,9 +121,9 @@ export class GameHud {
     return btn;
   }
 
-  private toolButton(label: string, tool: ToolId) {
+  private toolButton(tool: ToolId) {
     const key: PowerupKey = tool === 'sarea' ? 'sarea' : tool === 'area' ? 'area' : 'hint';
-    const btn = this.badgeButton(label, key);
+    const btn = this.badgeButton(key);
     const start = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
@@ -153,8 +149,10 @@ export class GameHud {
     return btn;
   }
 
-  private badgeButton(label: string, key: PowerupKey) {
-    const btn = button(label, 'btn btn-secondary hud-powerup');
+  private badgeButton(key: PowerupKey) {
+    const label = powerupName(key);
+    const tone = key === 'sarea' ? 'btn-coral' : 'btn-mint';
+    const btn = roundButton(key, label, tone);
     const badge = el('span', 'hud-badge');
     btn.appendChild(badge);
     this.badges.set(key, badge);
@@ -215,7 +213,7 @@ export class GameHud {
 
   private ensureReplayButton() {
     if (this.replayBtn) return;
-    this.replayBtn = button(t('hud.replay'), 'btn hud-replay', () => this.callbacks.onReplay());
+    this.replayBtn = roundButton('replay', t('hud.replay'), 'btn-coral', () => this.callbacks.onReplay());
     this.bottom.prepend(this.replayBtn);
   }
 
@@ -253,17 +251,17 @@ export class GameHud {
     if (packHasItems(event.rewards)) {
       const rewardsTitle = el('p', 'hud-rewards-title');
       rewardsTitle.textContent = t('hud.rewardsTitle');
-      const list = el('ul', 'hud-rewards');
-      for (const row of packEntries(event.rewards!)) {
-        const item = el('li');
-        item.textContent = t('hud.rewardItem', { name: powerupName(row.id), n: row.n });
-        list.appendChild(item);
+      const row = el('div', 'hud-reward-row');
+      for (const item of packEntries(event.rewards!)) {
+        const chip = el('span', 'hud-chip');
+        chip.textContent = t('hud.rewardItem', { name: powerupName(item.id), n: item.n });
+        row.appendChild(chip);
       }
-      card.append(rewardsTitle, list);
+      card.append(rewardsTitle, row);
     }
     const actions = el('div', 'hud-card-actions');
-    const replay = button(t('hud.replay'), 'btn hud-replay', () => this.callbacks.onReplay());
-    const menu = button(t('hud.menu'), 'btn btn-secondary', () => this.callbacks.onExitToMenu());
+    const replay = button(t('hud.replay'), 'btn', () => this.callbacks.onReplay());
+    const menu = button(t('hud.map'), 'btn btn-mint', () => this.callbacks.onExitToMenu());
     actions.append(replay, menu);
     card.append(actions);
     this.overlay.appendChild(card);
@@ -288,10 +286,25 @@ function button(label: string, className: string, onClick?: () => void) {
   const btn = el('button', className);
   btn.type = 'button';
   btn.textContent = label;
-  if (onClick) btn.onclick = (e) => {
-    e.stopPropagation();
-    onClick();
-  };
+  if (onClick)
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      onClick();
+    };
+  return btn;
+}
+
+function roundButton(icon: IconName, label: string, tone: string, onClick?: () => void) {
+  const btn = el('button', `btn ${tone} hud-round`);
+  btn.type = 'button';
+  btn.innerHTML = iconHtml(icon);
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  if (onClick)
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      onClick();
+    };
   return btn;
 }
 

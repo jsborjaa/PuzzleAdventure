@@ -9,7 +9,7 @@ export class MenuScene extends Scene {
   }
 
   create() {
-    this.cameras.main.setBackgroundColor('#2f3542');
+    this.cameras.main.setBackgroundColor('#6ec8ff');
     const host = document.getElementById('ui-layer');
     if (!host) return;
     this.menu = new MenuView(host, (levelId) => {

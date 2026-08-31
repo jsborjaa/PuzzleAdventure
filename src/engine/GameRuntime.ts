@@ -1,9 +1,11 @@
 import {
   CAMERA_BOUNDS_PADDING,
+  CAMERA_FIT_VIEW_PAD,
   CAMERA_FIT_ZOOM_MAX,
   CAMERA_FIT_ZOOM_MIN,
   type ToolId,
 } from '../domain/product';
+import type { ScatterBounds } from '../domain/types';
 import { buildJigsawLayout } from '../domain/jigsaw';
 import { applyQualityGate } from '../domain/quality';
 import { makeScatterBounds, PuzzleSession } from '../domain/PuzzleSession';
@@ -76,7 +78,7 @@ export class GameRuntime {
       this.board.destroy();
       return;
     }
-    this.fitCamera(bounds.world);
+    this.fitCamera(bounds);
     this.board.setGuideAlpha(this.session.guideAlpha);
 
     this.camera = new CameraController(this.scene);
@@ -149,7 +151,8 @@ export class GameRuntime {
     this.scene.scene.start('MenuScene');
   }
 
-  private fitCamera(world: { x: number; y: number; width: number; height: number }) {
+  private fitCamera(bounds: ScatterBounds) {
+    const { world, board } = bounds;
     const cam = this.scene.cameras.main;
     cam.setBounds(
       world.x - CAMERA_BOUNDS_PADDING,
@@ -157,9 +160,11 @@ export class GameRuntime {
       world.width + CAMERA_BOUNDS_PADDING * 2,
       world.height + CAMERA_BOUNDS_PADDING * 2,
     );
-    cam.centerOn(world.x + world.width / 2, world.y + world.height / 2);
+    cam.centerOn(board.x + board.width / 2, board.y + board.height / 2);
+    const fitW = world.width + CAMERA_FIT_VIEW_PAD * 2;
+    const fitH = world.height + CAMERA_FIT_VIEW_PAD * 2;
     const zoom = Phaser.Math.Clamp(
-      Math.min(this.scene.scale.width / world.width, this.scene.scale.height / world.height),
+      Math.min(this.scene.scale.width / fitW, this.scene.scale.height / fitH),
       CAMERA_FIT_ZOOM_MIN,
       CAMERA_FIT_ZOOM_MAX,
     );

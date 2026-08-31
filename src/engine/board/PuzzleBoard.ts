@@ -97,13 +97,18 @@ export class PuzzleBoard {
   }
 
   private setupBoardUi() {
+    const pad = 18;
+    const card = this.scene.add.graphics();
+    card.fillStyle(0xfff6e8, 1);
+    card.fillRoundedRect(-pad, -pad, this.boardWidth + pad * 2, this.boardHeight + pad * 2, 20);
+    card.lineStyle(6, 0xffffff, 1);
+    card.strokeRoundedRect(-pad, -pad, this.boardWidth + pad * 2, this.boardHeight + pad * 2, 20);
+    card.lineStyle(3, 0xffc53d, 0.95);
+    card.strokeRoundedRect(-pad + 4, -pad + 4, this.boardWidth + pad * 2 - 8, this.boardHeight + pad * 2 - 8, 16);
+    this.boardContainer.add(card);
     this.bgHint = this.scene.add.image(0, 0, this.imageKey);
     this.bgHint.setAlpha(0).setOrigin(0, 0).setName('guide_image');
     this.boardContainer.add(this.bgHint);
-    const border = this.scene.add.graphics();
-    border.lineStyle(4, 0x666666, 0.8);
-    border.strokeRect(0, 0, this.boardWidth, this.boardHeight);
-    this.boardContainer.add(border);
   }
 
   private async ensureAtlas(): Promise<BuiltAtlas> {

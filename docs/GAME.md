@@ -61,7 +61,7 @@ After swapping files in `public/`, hard-refresh in **dev**. Dev skips the Indexe
 | HUD / menu | Vanilla DOM | `#ui-layer` on top of the canvas. **Not React.** |
 | Tests | Vitest (node) | `src/**/*.test.ts` — Phaser-free domain only |
 | Native shell | Capacitor 6 | App id `com.puzzleadventure.app` |
-| Android | Capacitor Android project | Portrait lock, status bar `#2f3542` |
+| Android | Capacitor Android project | Portrait lock, status bar `#6ec8ff` |
 | Persistence | `localStorage` | Progress, session, power-ups, times, locale, **period claims** |
 | i18n | One typed catalog | `src/i18n/messages.ts` — `t('hud.menu')`. No i18next. |
 | Piece textures | Canvas atlases + IndexedDB | DB `puzzle-adventure-atlas-v2`; skipped in `import.meta.env.DEV` |
@@ -119,14 +119,14 @@ src/main.ts     Entry (initI18n before Phaser)
 | `src/engine/tools/` | Área 3×3, sÁrea 4×4, Pista 1×1 |
 | `src/engine/scenes/` | Boot → Menu → Game |
 | `src/i18n/messages.ts` | All UI copy: each key has `en` / `es` / `de` / `fr` / `pt` |
-| `src/ui/GameHud.ts` | In-level HTML chrome |
-| `src/ui/MenuView.ts` | Level map, Workshop, Store |
-| `src/ui/style.css` | Safe-area, HUD, menu |
+| `src/ui/GameHud.ts` | Round-icon in-level chrome + win card |
+| `src/ui/MenuView.ts` | Hub: map, events, store, workshop, settings, start sheet |
+| `src/ui/style.css` | Hub tokens, 3D buttons, dock, HUD |
 
 ### 4.3 Data flow (play)
 
 ```
-MenuView  --levelId-->  GameScene  -->  GameRuntime.start()
+MenuView  --start sheet Play-->  GameScene  -->  GameRuntime.start()
                                       ├─ quality gate → jigsaw layout → PuzzleSession
                                       ├─ PuzzleBoard (atlas + sprites)
                                       ├─ CameraController
@@ -210,24 +210,26 @@ A leftover fully-solved save is **not** treated as resume (`inProgress` requires
 
 ### 7.1 Boot
 
-1. `BootScene` loads all campaign + event images (dev URLs get `?t=timestamp`).
+1. DOM splash (logo + bar) in `#ui-layer` while `BootScene` loads campaign + event images (dev URLs get `?t=timestamp`).
 2. Lazy-loads `MenuScene` and `GameScene`.
-3. Starts the menu.
+3. Starts the hub (menu).
 
-### 7.2 Menu
+### 7.2 Hub (menu)
 
-- Grid of 14 cards (locked cards show `?`).
-- Event row: Daily / Weekly / Monthly (labels follow the current locale).
-- Language `<select>` in the header (English, Español, Deutsch, Français, Português).
-- **Workshop** (craft 4 Area / 10×20s) and **Store** (SKU list; DEV simulate-ad).
-- Best time on a card if `recordClear` has run for that id.
-- **Reset** / **Reset eventos** (dev-facing, still in the UI).
-- Footer: `Nivel máximo: highestUnlockedIndex + 1`.
+Portrait home with Candy Crush-like chrome around the photo grid:
+
+- **Top:** stacked logo · inventory chips (hint / area / 20s, open Store) · Settings gear.
+- **Map tab:** 14 photo cards. Locked cards show a glossy `?`. Current unlock pulses. Best time as a gold pill.
+- Tap an unlocked card → **start sheet** (thumbnail, piece count, best time, **Play**).
+- **Events tab:** Daily / Weekly / Monthly as large island cards.
+- **Store / Workshop tabs:** full pages (not overlays). Craft and SKUs unchanged.
+- **Bottom dock:** Map · Events · Store · Workshop.
+- **Settings:** language. **Reset** / **Reset events** only in `import.meta.env.DEV`.
 
 ### 7.3 In-level HUD
 
-**Top:** Menú · progress bar · timer · récord · hold **Ver** (peek).  
-**Bottom:** 🔓 ∞ · ⏲️ 20s · 🟥 Área · ⬛ sÁrea · 💡 Pista · **Reset PUs** (`import.meta.env.DEV` only) · **Desarmar y jugar** when assembled/won.
+**Top:** round Map back · progress capsule · timer/record glass pill · hold Peek.  
+**Bottom:** five round tool buttons with count badges (Infinite, 20s, Area, sArea, Hint). Labels are `aria-label` / `title`. **Scatter and play** is a round replay control when assembled/won.
 
 HUD `pointer-events` are on **buttons only**, not the full-width bars, so the canvas stays hittable.
 
@@ -238,7 +240,7 @@ HUD `pointer-events` are on **buttons only**, not the full-width bars, so the ca
 3. Release near the correct slot, **upright**, within **30px** → snap (snap SFX), `placePiece`.
 4. Solved sprites move to the solved layer and lose interaction.
 
-Pan: drag empty space. Pinch: two fingers, zoom 0.2–3. Camera is disabled while a HUD tool is held.
+Pan: drag empty space. Pinch: two fingers, zoom 0.15–3. Camera is disabled while a HUD tool is held. In-level sky matches the hub (`#6ec8ff`); pieces scatter off the photo; the opening view fits the whole scatter so every piece is on screen.
 
 ### 7.5 Win
 
@@ -246,7 +248,7 @@ Pan: drag empty space. Pinch: two fingers, zoom 0.2–3. Camera is disabled whil
 - Campaign: `completeLevel`. If the unlock index **increases**, grant first-clear pack.
 - Events: grant the period pack **once** (UTC day / ISO week / `YYYY-MM`). Replay and already-claimed periods: no pack.
 - In-progress session for that puzzle is **cleared**.
-- Overlay: time, récord / nuevo récord, **reward list if granted**, **Desarmar y jugar**, **Menú**.
+- Overlay: cream win card (pop-in), time, récord / nuevo récord, **reward chips if granted**, **Scatter and play**, **Map**.
 - HUD also gains **Desarmar y jugar** so a second attempt does not require leaving.
 
 Leaving after a win does **not** write a solved session back (that was the “button disappeared until I visited another level” bug).
@@ -263,7 +265,7 @@ Clears the relevant session and `scene.restart({ levelId, forceReplay: true })` 
 
 - Grid from image aspect × requested count (`computeGrid`).
 - Seeded tabs/slots (`buildJigsawLayout`); seed = hash of `levelId`, grid, image size.
-- Scatter in a 250px margin around the board (`BOARD_SCATTER_MARGIN`), random 0/90/180/270°.
+- Scatter in the four side bands around the board (`BOARD_SCATTER_MARGIN` 560px, `BOARD_SCATTER_GAP` 40px so centers stay off the photo), random 0/90/180/270°. Initial camera fits that scatter world so the photo and all pieces are visible without zooming.
 
 ### 8.2 Atlas pipeline
 
@@ -290,7 +292,7 @@ Commons share the same store value. Hint exists so not every common is hoarded f
 
 Hold-tools track **window** `pointermove`. Confirm uses Phaser `transformPointer(pageX, pageY)`.
 
-**Craft:** HUD swipe (Área → sÁrea, 20s → ∞) plus menu **Workshop** (explicit convert buttons). Costs come from the catalog (`craftCost`), not hardcoded 2/3.
+**Craft:** HUD swipe (Área → sÁrea, 20s → ∞) plus hub **Workshop** tab (explicit convert buttons). Costs come from the catalog (`craftCost`), not hardcoded 2/3.
 
 **Sources (never on replay):**
 
@@ -309,8 +311,6 @@ Period keys live in `puzzle_adventure_claims_v1`. Replay and a second win in the
 **Store** is a shortcut for the same packs, not a second currency. IAP buttons are “Coming soon”. Ad simulate is **DEV-only**.
 
 Replay mode: tools and reveals that consume charges are no-ops. **Ver** (eye hold) still works.
-
-**Reset PUs** (HUD, `import.meta.env.DEV` only): every key → 5 (`DEV_POWERUP_CHARGES`).
 
 ### 8.4 Timer and times
 
@@ -332,7 +332,7 @@ If requested pieces **> 200** and `navigator.deviceMemory < 4`, count becomes 20
 
 - Capacitor app name **Puzzle Adventure**, id `com.puzzleadventure.app`, `webDir: dist`.
 - Android `MainActivity` = `BridgeActivity`, **portrait**.
-- Status bar dark / `#2f3542` from `bootstrap.ts` on native only.
+- Status bar dark icons / `#6ec8ff` from `bootstrap.ts` on native only.
 - Haptics: **not wired**.
 
 ### 8.8 Languages
@@ -341,7 +341,7 @@ Shipped: `en` (canonical keys + fallback), `es`, `de`, `fr`, `pt`.
 
 Resolution: saved `puzzle_adventure_locale_v1` → first matching `navigator.languages` (`pt-BR` → `pt`) → `en`.
 
-Picker: menu header `<select>`. Changing language rebuilds the menu. In-level HUD uses the locale at scene start (return to menu to switch).
+Picker: Settings on the hub (gear). Changing language rebuilds the hub. In-level HUD uses the locale at scene start (return to map to switch).
 
 All player-facing copy lives in [`src/i18n/messages.ts`](../src/i18n/messages.ts): one object per string, all five languages together. `t('group.key')` reads the active locale. Do not hardcode HUD/menu strings.
 
@@ -381,14 +381,15 @@ On load, keys starting with `pockets:` are deleted (legacy).
 | `SNAP_DISTANCE_PX` | 30 | Snap radius |
 | `REVEAL_TEMP_MS` | 20_000 | Temp reveal duration |
 | `REVEAL_*_ALPHA` | 0.3 / 0.4 | Guide image opacity |
-| `BOARD_SCATTER_MARGIN` | 250 | Scatter world padding |
-| `CAMERA_ZOOM_MIN/MAX` | 0.2 / 3 | Pinch limits |
-| `CAMERA_FIT_ZOOM_*` | 0.4 / 1.2 | Initial fit clamp |
+| `BOARD_SCATTER_MARGIN` | 560 | Scatter world padding |
+| `BOARD_SCATTER_GAP` | 40 | Extra gap so piece centers stay off the photo |
+| `CAMERA_FIT_VIEW_PAD` | 80 | Padding around the scatter world for the opening zoom |
+| `CAMERA_ZOOM_MIN/MAX` | 0.15 / 3 | Pinch limits |
+| `CAMERA_FIT_ZOOM_*` | 0.15 / 1.2 | Initial fit clamp |
 | `QUALITY_SOFT_CAP` | 200 | Low-RAM piece cap |
 | `QUALITY_LOW_RAM_GB` | 4 | Gate threshold |
 | `ATLAS_MAX_SIZE` | 4096 | Atlas canvas max |
 | `DEFAULT_POWERUPS` | 8 / 5 / 5 / 0 / 0 | New player inventory (commons only) |
-| `DEV_POWERUP_CHARGES` | 5 | Reset PUs fill (DEV HUD) |
 
 Craft costs live on `POWERUP_DEFS` in `src/domain/powerups.ts` (4 Area, 10 temp). Grant packs and `STORE_SKUS` are in the same file.
 
@@ -445,7 +446,7 @@ Use this as the backlog seed, not as committed scope.
 | **Haptics** | Unused | Capacitor Haptics on snap/win |
 | **Sound assets** | Synth only | Optional files; keep `AudioService` as the single API |
 | **Accounts / cloud** | None | If added, wrap `ProgressStore` rather than scattering `localStorage` |
-| **Dev buttons in production** | Reset / Reset eventos still visible | Gate with `import.meta.env.DEV` when ready. Reset PUs already gated. |
+| **Dev buttons in production** | Reset / Reset events in Settings, DEV only | — |
 | **Reset vs times** | Reset progress does not clear campaign times | Product decision: wipe or keep récords |
 | **Campaign session slot** | One level at a time | Per-level campaign saves if players juggle levels |
 

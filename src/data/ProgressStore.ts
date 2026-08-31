@@ -1,4 +1,4 @@
-import { DEFAULT_POWERUPS, DEV_POWERUP_CHARGES, type PowerupKey } from '../domain/product';
+import { DEFAULT_POWERUPS, type PowerupKey } from '../domain/product';
 import type { SavedSession } from '../domain/types';
 import type { PowerupCounts } from '../domain/inventory';
 import { applyPack, craft, createInventory } from '../domain/inventory';
@@ -360,18 +360,6 @@ export class ProgressStore {
 
   setPowerups(counts: PowerupCounts) {
     this.powerups = { ...counts };
-    this.savePowerups();
-  }
-
-  /** Dev helper: set every power-up to 5. */
-  resetPowerups() {
-    this.powerups = {
-      reveal_temp: DEV_POWERUP_CHARGES,
-      area: DEV_POWERUP_CHARGES,
-      hint: DEV_POWERUP_CHARGES,
-      sarea: DEV_POWERUP_CHARGES,
-      reveal_perm: DEV_POWERUP_CHARGES,
-    };
     this.savePowerups();
   }
 

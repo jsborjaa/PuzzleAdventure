@@ -1,6 +1,6 @@
 import { ProgressStore } from '../data/ProgressStore';
 import { consume, craft, hasCharges, type PowerupCounts } from './inventory';
-import { BOARD_SCATTER_MARGIN, REVEAL_EYE_ALPHA, REVEAL_PERM_ALPHA, REVEAL_TEMP_ALPHA, REVEAL_TEMP_MS, type PlayMode, type PowerupKey } from './product';
+import { BOARD_SCATTER_GAP, BOARD_SCATTER_MARGIN, REVEAL_EYE_ALPHA, REVEAL_PERM_ALPHA, REVEAL_TEMP_ALPHA, REVEAL_TEMP_MS, type PlayMode, type PowerupKey } from './product';
 import type { JigsawLayout } from './jigsaw';
 import { SeededRng } from './rng';
 import { canSnap, normalizeAngle } from './snapRules';
@@ -269,13 +269,6 @@ export class PuzzleSession {
     return this.upgradeFrom('reveal_temp');
   }
 
-  /** Dev helper: each power-up → 5, including sÁrea and revelar ∞. */
-  resetPowerups() {
-    this.store.resetPowerups();
-    this.inventory = this.store.getPowerups();
-    this.emit({ type: 'inventoryChanged' });
-  }
-
   save() {
     if (this.mode === 'replay' || this.wonEmitted || isWon(this.pieces.values())) return;
     const saved: SavedSession = {
@@ -421,31 +414,33 @@ export class PuzzleSession {
 
   private scatter(piece: PieceState, rng: SeededRng) {
     const { world, board } = this.bounds;
-    const margin = 20;
+    const edge = 20;
+    const gap = Math.max(piece.logicalWidth, piece.logicalHeight) / 2 + BOARD_SCATTER_GAP;
+    const minBand = gap + edge;
     const zones: number[] = [];
-    if (board.y - world.y > 50) zones.push(0);
-    if (world.x + world.width - (board.x + board.width) > 50) zones.push(1);
-    if (world.y + world.height - (board.y + board.height) > 50) zones.push(2);
-    if (board.x - world.x > 50) zones.push(3);
+    if (board.y - world.y > minBand) zones.push(0);
+    if (world.x + world.width - (board.x + board.width) > minBand) zones.push(1);
+    if (world.y + world.height - (board.y + board.height) > minBand) zones.push(2);
+    if (board.x - world.x > minBand) zones.push(3);
     const zone = zones.length ? rng.pick(zones) : rng.between(0, 3);
 
-    let minX = world.x + margin;
-    let maxX = world.x + world.width - margin;
-    let minY = world.y + margin;
-    let maxY = world.y + world.height - margin;
+    let minX = world.x + edge;
+    let maxX = world.x + world.width - edge;
+    let minY = world.y + edge;
+    let maxY = world.y + world.height - edge;
 
     if (zone === 0) {
-      minY = world.y + margin;
-      maxY = board.y - margin;
+      minY = world.y + edge;
+      maxY = board.y - gap;
     } else if (zone === 1) {
-      minX = board.x + board.width + margin;
-      maxX = world.x + world.width - margin;
+      minX = board.x + board.width + gap;
+      maxX = world.x + world.width - edge;
     } else if (zone === 2) {
-      minY = board.y + board.height + margin;
-      maxY = world.y + world.height - margin;
+      minY = board.y + board.height + gap;
+      maxY = world.y + world.height - edge;
     } else {
-      minX = world.x + margin;
-      maxX = board.x - margin;
+      minX = world.x + edge;
+      maxX = board.x - gap;
     }
     if (minX > maxX) minX = maxX;
     if (minY > maxY) minY = maxY;

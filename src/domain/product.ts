@@ -4,11 +4,13 @@ export const REVEAL_PERM_ALPHA = 0.3;
 export const REVEAL_TEMP_ALPHA = 0.3;
 export const REVEAL_EYE_ALPHA = 0.4;
 
-export const BOARD_SCATTER_MARGIN = 250;
-export const CAMERA_ZOOM_MIN = 0.2;
+export const BOARD_SCATTER_MARGIN = 560;
+export const BOARD_SCATTER_GAP = 40;
+export const CAMERA_ZOOM_MIN = 0.15;
 export const CAMERA_ZOOM_MAX = 3;
-export const CAMERA_FIT_ZOOM_MIN = 0.4;
+export const CAMERA_FIT_ZOOM_MIN = 0.15;
 export const CAMERA_FIT_ZOOM_MAX = 1.2;
+export const CAMERA_FIT_VIEW_PAD = 80;
 export const CAMERA_BOUNDS_PADDING = 4000;
 
 export const QUALITY_SOFT_CAP = 200;
@@ -26,6 +28,3 @@ export const DEFAULT_POWERUPS: Record<PowerupKey, number> = {
   sarea: 0,
   reveal_perm: 0,
 };
-
-/** Dev-only fill (Reset PUs). */
-export const DEV_POWERUP_CHARGES = 5;
