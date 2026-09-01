@@ -234,19 +234,21 @@ body {
   align-items: center;
   gap: 8px;
   max-width: min(78vw, 420px);
-  overflow-x: auto;
+  overflow: visible;
   padding: 4px;
   transform: translate(calc(100% + 24px), -50%);
   opacity: 0;
   visibility: hidden;
   transition: transform 0.22s ease, opacity 0.18s ease, visibility 0.18s;
   pointer-events: none;
+  touch-action: none;
 }
 
 .hud-bottom.is-open .hud-tools {
   transform: translate(0, -50%);
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
 }
 
 .hud-bottom .hud-edge-tab {
@@ -273,6 +275,7 @@ body {
   box-shadow: 0 4px 0 #e0b56a;
   cursor: pointer;
   font-family: inherit;
+  touch-action: none;
 }
 
 .hud-edge-tab svg {
@@ -348,6 +351,7 @@ body {
   display: grid;
   place-items: center;
   flex: none;
+  touch-action: none;
 }
 
 .hud-round svg {

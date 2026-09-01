@@ -57,7 +57,7 @@ After swapping files in `public/`, hard-refresh in **dev**. Dev skips the Indexe
 |---|---|---|
 | Language | TypeScript (strict) | `tsconfig.json` — ES2020, bundler resolution, `noEmit` |
 | Bundler | Vite 5 | `base: './'` so Capacitor file URLs work |
-| Game view | Phaser 3.80 | Canvas in `#game-container`, `Scale.RESIZE` |
+| Game view | Phaser 3.80 | Canvas in `#game-container`, `Scale.RESIZE`. `input.touch.capture` is **false** so HUD buttons receive fingers. |
 | HUD / menu | Vanilla DOM | `#ui-layer` on top of the canvas. **Not React.** |
 | Tests | Vitest (node) | `src/**/*.test.ts` — Phaser-free domain only |
 | Native shell | Capacitor 6 | App id `com.puzzleadventure.app` |

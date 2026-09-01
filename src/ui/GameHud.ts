@@ -134,7 +134,8 @@ export class GameHud {
 
   private powerup(key: PowerupKey, onClick: () => void) {
     const btn = this.badgeButton(key);
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
       e.stopPropagation();
       onClick();
     });
@@ -166,7 +167,7 @@ export class GameHud {
       window.addEventListener('pointercancel', stop);
       window.addEventListener('touchend', stop);
     };
-    btn.addEventListener('pointerdown', start);
+    btn.addEventListener('pointerdown', start, { passive: false });
     return btn;
   }
 
@@ -329,15 +330,23 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string) {
   return node;
 }
 
+function tap(btn: HTMLButtonElement, onClick: () => void) {
+  btn.addEventListener(
+    'pointerdown',
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onClick();
+    },
+    { passive: false },
+  );
+}
+
 function button(label: string, className: string, onClick?: () => void) {
   const btn = el('button', className);
   btn.type = 'button';
   btn.textContent = label;
-  if (onClick)
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      onClick();
-    };
+  if (onClick) tap(btn, onClick);
   return btn;
 }
 
@@ -348,10 +357,7 @@ function edgeTab(icon: IconName, label: string, onClick: () => void) {
   btn.title = label;
   btn.setAttribute('aria-label', label);
   btn.setAttribute('aria-expanded', 'false');
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    onClick();
-  };
+  tap(btn, onClick);
   return btn;
 }
 
@@ -361,11 +367,7 @@ function roundButton(icon: IconName, label: string, tone: string, onClick?: () =
   btn.innerHTML = iconHtml(icon);
   btn.title = label;
   btn.setAttribute('aria-label', label);
-  if (onClick)
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      onClick();
-    };
+  if (onClick) tap(btn, onClick);
   return btn;
 }
 
@@ -379,6 +381,6 @@ function pagePoint(ev: Event): { x: number; y: number } {
 function preventCanvasSteal(root: HTMLElement, signal: AbortSignal) {
   const stop = (e: Event) => e.stopPropagation();
   root.addEventListener('mousedown', stop, { signal });
-  root.addEventListener('touchstart', stop, { passive: false, signal });
+  root.addEventListener('touchstart', stop, { passive: true, signal });
   root.addEventListener('pointerdown', stop, { signal });
 }
