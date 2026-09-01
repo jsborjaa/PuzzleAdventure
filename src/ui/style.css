@@ -38,11 +38,14 @@
   box-sizing: border-box;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #game-container,
 #game-container canvas {
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
