@@ -237,7 +237,7 @@ HUD `pointer-events` are on **tabs, open buttons, Peek, and timer chips only**, 
 ### 7.4 Assemble
 
 1. Drag a piece (pop SFX, slight scale-up).
-2. Short drag (`< 10px`) on release = **rotate 90°** (click SFX).
+2. Short drag (`< 10px`) on release = **rotate 90°** (click SFX). Duplicate touch+pointer events are ignored so a tap is never 180°.
 3. Release near the correct slot, **upright**, within **30px** → snap (two-note chime), `placePiece`, ink/coral/gold outline along the jigsaw shape.
 4. Solved sprites move to the solved layer and lose interaction. Hint uses the same outline glow when the piece locks.
 
@@ -394,7 +394,7 @@ On load, keys starting with `pockets:` are deleted (legacy).
 
 Craft costs live on `POWERUP_DEFS` in `src/domain/powerups.ts` (4 Area, 10 temp). Grant packs and `STORE_SKUS` are in the same file.
 
-Piece interaction tap threshold: **10px** (`PieceInteraction.ts`). Área / sÁrea grid sizes: **3** and **4** (`GameRuntime`).
+Piece interaction tap threshold: **10px** (`PieceInteraction.ts`). Rotate debounce **150ms** so a finger tap is one 90° turn. Área / sÁrea grid sizes: **3** and **4** (`GameRuntime`).
 
 ---
 
