@@ -16,7 +16,10 @@ export class AudioService {
   }
 
   public playSnap() {
-    this.blip('triangle', 800, 1200, 0.15, 0.3);
+    this.resume();
+    const now = this.ctx.currentTime;
+    this.chime('triangle', 880, 0.22, now, 0.12);
+    this.chime('triangle', 1320, 0.18, now + 0.07, 0.14);
   }
 
   public playClick() {
@@ -37,6 +40,19 @@ export class AudioService {
       osc.start(now + i * 0.1);
       osc.stop(now + i * 0.1 + 0.5);
     });
+  }
+
+  private chime(type: OscillatorType, freq: number, vol: number, at: number, dur: number) {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, at);
+    gain.gain.setValueAtTime(vol, at);
+    gain.gain.exponentialRampToValueAtTime(0.01, at + dur);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(at);
+    osc.stop(at + dur);
   }
 
   private blip(type: OscillatorType, from: number, to: number, dur: number, vol: number) {

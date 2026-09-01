@@ -62,13 +62,14 @@ body {
 }
 
 #app {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   height: 100dvh;
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
+  overflow: hidden;
 }
 
 #game-container {
@@ -163,11 +164,6 @@ body {
   pointer-events: none;
 }
 
-.hud-top > *,
-.hud-bottom > * {
-  pointer-events: auto;
-}
-
 .hud-top {
   top: var(--safe-top);
   justify-content: space-between;
@@ -180,13 +176,118 @@ body {
   flex: 1;
   justify-content: center;
   min-width: 0;
+  pointer-events: none;
+}
+
+.hud-top-mid > * {
+  pointer-events: auto;
+}
+
+.hud-top > .hud-round {
+  pointer-events: auto;
+}
+
+.hud-map-rail {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.hud-map-rail .hud-edge-tab {
+  position: relative;
+  z-index: 1;
+}
+
+.hud-map-rail .hud-round {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 50%;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+  transform: translate(-120%, -50%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hud-map-rail.is-open .hud-round {
+  transform: translate(0, -50%);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .hud-bottom {
+  left: auto;
+  right: var(--safe-right);
   bottom: var(--safe-bottom);
-  justify-content: center;
-  flex-wrap: wrap;
-  min-height: 64px;
+  width: 36px;
+  min-height: 36px;
+  justify-content: flex-end;
+}
+
+.hud-tools {
+  position: absolute;
+  right: calc(100% + 6px);
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(78vw, 420px);
+  overflow-x: auto;
+  padding: 4px;
+  transform: translate(calc(100% + 24px), -50%);
+  opacity: 0;
+  visibility: hidden;
+  transition: transform 0.22s ease, opacity 0.18s ease, visibility 0.18s;
+  pointer-events: none;
+}
+
+.hud-bottom.is-open .hud-tools {
+  transform: translate(0, -50%);
+  opacity: 1;
+  visibility: visible;
+}
+
+.hud-bottom .hud-edge-tab {
+  border-radius: 14px 8px 8px 14px;
+}
+
+.hud-bottom.is-open .hud-tools > * {
+  pointer-events: auto;
+}
+
+.hud-edge-tab {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 14px 14px 8px 8px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  pointer-events: auto;
+  background: var(--cream);
+  color: var(--ink);
+  border: 3px solid #fff;
+  box-shadow: 0 4px 0 #e0b56a;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hud-edge-tab svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.hud-map-rail .hud-edge-tab {
+  border-radius: 8px 14px 14px 8px;
+}
+
+.hud-edge-tab:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #e0b56a;
 }
 
 .progress-bar-container {
@@ -239,9 +340,9 @@ body {
 }
 
 .hud-round {
-  width: 52px;
-  height: 52px;
-  min-height: 52px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   border-radius: 50%;
   display: grid;
@@ -824,7 +925,92 @@ body {
   }
 
   .hud-round {
-    width: 56px;
-    height: 56px;
+    width: 52px;
+    height: 52px;
+    min-height: 52px;
   }
+}
+
+@media (max-width: 480px) {
+  .hub-logo .brand-top {
+    font-size: 14px;
+  }
+
+  .hub-logo .brand-bottom {
+    font-size: 18px;
+  }
+
+  .hub-chip {
+    min-height: 32px;
+    padding: 2px 6px 2px 4px;
+    font-size: 12px;
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 10px;
+  }
+
+  .hub-dock {
+    gap: 4px;
+    padding: 6px var(--safe-right) var(--safe-bottom) var(--safe-left);
+  }
+
+  .dock-tab {
+    min-height: 52px;
+    font-size: 10px;
+  }
+}
+
+html.dev-preview body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a1230;
+  padding-top: 48px;
+}
+
+html.dev-preview #app {
+  flex: none;
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 0 0 8px #2a1a4a, 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+
+.dev-device-bar {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: none;
+  gap: 6px;
+  padding: 6px;
+  background: var(--cream);
+  border: 3px solid #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 0 #e0b56a;
+  pointer-events: auto;
+}
+
+.dev-device-bar.is-on {
+  display: flex;
+}
+
+.dev-device-bar button {
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 2px solid var(--cream-edge);
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dev-device-bar button.is-active {
+  background: var(--gold);
+  border-color: #fff;
 }

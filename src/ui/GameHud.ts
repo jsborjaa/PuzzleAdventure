@@ -16,6 +16,10 @@ export interface HudCallbacks {
 export class GameHud {
   private root: HTMLElement;
   private bottom: HTMLDivElement;
+  private toolsRow: HTMLDivElement;
+  private mapRail: HTMLDivElement;
+  private mapTab: HTMLButtonElement;
+  private toolsTab: HTMLButtonElement;
   private progressFill: HTMLDivElement;
   private timerLabel: HTMLDivElement;
   private bestLabel: HTMLDivElement;
@@ -38,7 +42,11 @@ export class GameHud {
     const top = el('div', 'hud-top');
     const bottom = el('div', 'hud-bottom');
 
+    const mapTab = edgeTab('chevronRight', t('hud.showMap'), () => this.toggleMap());
     const menu = roundButton('map', t('hud.map'), 'btn-coral', () => this.callbacks.onExitToMenu());
+    const mapRail = el('div', 'hud-map-rail');
+    mapRail.append(mapTab, menu);
+
     const progress = el('div', 'progress-bar-container');
     this.progressFill = el('div', 'progress-bar-fill');
     progress.appendChild(this.progressFill);
@@ -61,8 +69,9 @@ export class GameHud {
     eye.addEventListener('pointerup', hold(false));
     eye.addEventListener('pointerleave', hold(false));
     eye.addEventListener('pointercancel', hold(false));
-    top.append(menu, mid, eye);
+    top.append(mapRail, mid, eye);
 
+    const tools = el('div', 'hud-tools');
     const perm = this.powerup('reveal_perm', () => this.session.togglePermanentReveal());
     const temp = this.powerup('reveal_temp', () => {
       if (this.session.activateTemporaryReveal()) this.startRevealCountdown(20);
@@ -70,13 +79,23 @@ export class GameHud {
     const area = this.toolButton('area');
     const sarea = this.toolButton('sarea');
     const hint = this.toolButton('hint');
-    bottom.append(perm, temp, area, sarea, hint);
+    tools.append(perm, temp, area, sarea, hint);
 
     this.setupUpgrade(area, sarea, () => this.session.upgradeArea());
     this.setupUpgrade(temp, perm, () => this.session.upgradeReveal());
 
+    const toolsTab = edgeTab('chevronLeft', t('hud.showTools'), () => this.toggleTools());
+    bottom.append(toolsTab, tools);
+
+    this.mapRail = mapRail;
+    this.mapTab = mapTab;
+    this.toolsTab = toolsTab;
+    this.toolsRow = tools;
     this.bottom = bottom;
-    if (this.session.mode === 'replay' || this.session.hasWon) this.ensureReplayButton();
+    if (this.session.mode === 'replay' || this.session.hasWon) {
+      this.ensureReplayButton();
+      this.setToolsOpen(true);
+    }
 
     host.append(top, bottom);
     preventCanvasSteal(host, this.abort.signal);
@@ -92,6 +111,7 @@ export class GameHud {
       }
       if (event.type === 'won') {
         this.ensureReplayButton();
+        this.setToolsOpen(true);
         this.showWin(event);
       }
     });
@@ -137,6 +157,7 @@ export class GameHud {
         btn.classList.remove('active');
         const page = pagePoint(ev);
         this.callbacks.onDeactivateTool(page.x, page.y);
+        this.setToolsOpen(false);
         window.removeEventListener('pointerup', stop);
         window.removeEventListener('pointercancel', stop);
         window.removeEventListener('touchend', stop);
@@ -211,10 +232,36 @@ export class GameHud {
     this.revealCountdown.style.display = 'none';
   }
 
+  private toggleMap() {
+    this.setMapOpen(!this.mapRail.classList.contains('is-open'));
+  }
+
+  private toggleTools() {
+    this.setToolsOpen(!this.bottom.classList.contains('is-open'));
+  }
+
+  private setMapOpen(open: boolean) {
+    this.mapRail.classList.toggle('is-open', open);
+    this.mapTab.innerHTML = iconHtml(open ? 'chevronLeft' : 'chevronRight');
+    const label = open ? t('hud.hideMap') : t('hud.showMap');
+    this.mapTab.title = label;
+    this.mapTab.setAttribute('aria-label', label);
+    this.mapTab.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  private setToolsOpen(open: boolean) {
+    this.bottom.classList.toggle('is-open', open);
+    this.toolsTab.innerHTML = iconHtml(open ? 'chevronRight' : 'chevronLeft');
+    const label = open ? t('hud.hideTools') : t('hud.showTools');
+    this.toolsTab.title = label;
+    this.toolsTab.setAttribute('aria-label', label);
+    this.toolsTab.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
   private ensureReplayButton() {
     if (this.replayBtn) return;
     this.replayBtn = roundButton('replay', t('hud.replay'), 'btn-coral', () => this.callbacks.onReplay());
-    this.bottom.prepend(this.replayBtn);
+    this.toolsRow.prepend(this.replayBtn);
   }
 
   private syncBest() {
@@ -291,6 +338,20 @@ function button(label: string, className: string, onClick?: () => void) {
       e.stopPropagation();
       onClick();
     };
+  return btn;
+}
+
+function edgeTab(icon: IconName, label: string, onClick: () => void) {
+  const btn = el('button', 'hud-edge-tab');
+  btn.type = 'button';
+  btn.innerHTML = iconHtml(icon);
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.setAttribute('aria-expanded', 'false');
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    onClick();
+  };
   return btn;
 }
 

@@ -10,7 +10,11 @@ export type IconName =
   | 'reveal_temp'
   | 'reveal_perm'
   | 'peek'
-  | 'replay';
+  | 'replay'
+  | 'chevronLeft'
+  | 'chevronRight'
+  | 'chevronUp'
+  | 'chevronDown';
 
 const svg = (path: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
@@ -49,5 +53,13 @@ export function iconHtml(name: IconName): string {
       return svg('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>');
     case 'replay':
       return svg('<path d="M4 7h6V4L4 7l6 3V7"/><path d="M20 12a8 8 0 1 1-2.2-5.5"/>');
+    case 'chevronLeft':
+      return svg('<path d="M15 5l-7 7 7 7"/>');
+    case 'chevronRight':
+      return svg('<path d="M9 5l7 7-7 7"/>');
+    case 'chevronUp':
+      return svg('<path d="M5 15l7-7 7 7"/>');
+    case 'chevronDown':
+      return svg('<path d="M5 9l7 7 7-7"/>');
   }
 }

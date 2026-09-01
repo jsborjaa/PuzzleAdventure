@@ -26,6 +26,7 @@ export class GameRuntime {
   private tools!: ToolManager;
   private camera!: CameraController;
   private hud!: GameHud;
+  private scatterBounds?: ScatterBounds;
   private unsub: () => void = () => {};
   private persistHandler?: () => void;
   private destroyed = false;
@@ -78,7 +79,9 @@ export class GameRuntime {
       this.board.destroy();
       return;
     }
+    this.scatterBounds = bounds;
     this.fitCamera(bounds);
+    this.scene.scale.on('resize', this.onScaleResize, this);
     this.board.setGuideAlpha(this.session.guideAlpha);
 
     this.camera = new CameraController(this.scene);
@@ -135,6 +138,7 @@ export class GameRuntime {
     if (this.destroyed) return;
     this.destroyed = true;
     this.session?.save();
+    this.scene.scale.off('resize', this.onScaleResize, this);
     this.unsub();
     this.hud?.destroy();
     this.tools?.destroy();
@@ -149,6 +153,11 @@ export class GameRuntime {
   private exitToMenu() {
     this.session?.save();
     this.scene.scene.start('MenuScene');
+  }
+
+  private onScaleResize() {
+    if (this.destroyed || !this.scatterBounds) return;
+    this.fitCamera(this.scatterBounds);
   }
 
   private fitCamera(bounds: ScatterBounds) {

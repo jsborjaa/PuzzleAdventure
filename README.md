@@ -18,6 +18,8 @@ npm run build
 
 Dev server: `http://localhost:5173/`. After replacing files in `public/`, hard-refresh.
 
+**Phone layout on this PC:** the localhost bar has **Desktop / iPhone / Pixel / Rotate** (dev only; not in production). Or Chrome DevTools → Toggle device toolbar (Ctrl+Shift+M) → pick **iPhone 14** or **Pixel 7**, then rotate. Hard-reload after switching devices.
+
 ## Android
 
 Needs Android Studio / SDK. App id: `com.puzzleadventure.app`.
@@ -39,4 +41,4 @@ npx cap open ios
 
 ## Play (short)
 
-Drag pieces, tap to rotate, pinch to zoom, pan empty space. Hub: Map / Events / Store / Workshop. Hold **Peek** in a level. Round tools: Infinite, 20s, Area, sArea, Hint. Completed levels open assembled; **Scatter and play** scatters again. Language is in Settings. Details in [docs/GAME.md](docs/GAME.md).
+Drag pieces, tap to rotate, pinch to zoom, pan empty space. Hub: Map / Events / Store / Workshop. Hold **Peek** in a level. Map and tools start hidden behind edge tabs; Peek and the timer stay visible. Completed levels open assembled; **Scatter and play** scatters again. Language is in Settings. Details in [docs/GAME.md](docs/GAME.md).

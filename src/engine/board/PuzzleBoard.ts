@@ -4,6 +4,7 @@ import type { PieceState, ScatterBounds } from '../../domain/types';
 import { PuzzleSession } from '../../domain/PuzzleSession';
 import { atlasCacheKey, buildPieceAtlas, fingerprintImage, type BuiltAtlas } from '../pipeline/atlasBuilder';
 import { getMemoryAtlas, loadCachedAtlas, persistAtlas, rememberAtlas } from '../pipeline/atlasCache';
+import { drawPiecePath } from '../pipeline/piecePath';
 import { PieceSprite } from './PieceSprite';
 import { PuzzleLayerStack } from './PuzzleLayerStack';
 
@@ -78,6 +79,7 @@ export class PuzzleBoard {
     sprite.setAngle(0);
     sprite.setScale(1);
     this.layers.moveToSolved(sprite);
+    this.playPlaceGlow(sprite);
   }
 
   setGuideAlpha(alpha: number) {
@@ -109,6 +111,55 @@ export class PuzzleBoard {
     this.bgHint = this.scene.add.image(0, 0, this.imageKey);
     this.bgHint.setAlpha(0).setOrigin(0, 0).setName('guide_image');
     this.boardContainer.add(this.bgHint);
+  }
+
+  private playPlaceGlow(sprite: PieceSprite) {
+    const def = this.layout.pieces.find((p) => p.id === sprite.pieceId);
+    if (!def) return;
+    const pw = this.layout.pieceWidth;
+    const ph = this.layout.pieceHeight;
+    const tab = this.layout.tabSize;
+    const pad = Math.ceil(tab) + 20;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(pw + pad * 2);
+    canvas.height = Math.ceil(ph + pad * 2);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.translate(pad, pad);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(59, 36, 96, 0.85)';
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = 'rgba(59, 36, 96, 0.95)';
+    ctx.lineWidth = 12;
+    drawPiecePath(ctx, pw, ph, tab, def.shapes);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255, 93, 122, 1)';
+    ctx.lineWidth = 7;
+    drawPiecePath(ctx, pw, ph, tab, def.shapes);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 197, 61, 1)';
+    ctx.lineWidth = 3;
+    drawPiecePath(ctx, pw, ph, tab, def.shapes);
+    ctx.stroke();
+
+    const key = `place-glow-${sprite.pieceId}-${this.scene.time.now}`;
+    if (this.scene.textures.exists(key)) this.scene.textures.remove(key);
+    this.scene.textures.addCanvas(key, canvas);
+    const glow = this.scene.add.image(sprite.x, sprite.y, key);
+    glow.setDepth(2500);
+    this.scene.tweens.add({
+      targets: glow,
+      alpha: 0,
+      scale: 1.04,
+      duration: 560,
+      ease: 'Cubic.out',
+      onComplete: () => {
+        glow.destroy();
+        if (this.scene.textures.exists(key)) this.scene.textures.remove(key);
+      },
+    });
   }
 
   private async ensureAtlas(): Promise<BuiltAtlas> {

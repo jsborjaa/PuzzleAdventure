@@ -228,17 +228,18 @@ Portrait home with Candy Crush-like chrome around the photo grid:
 
 ### 7.3 In-level HUD
 
-**Top:** round Map back · progress capsule · timer/record glass pill · hold Peek.  
-**Bottom:** five round tool buttons with count badges (Infinite, 20s, Area, sArea, Hint). Labels are `aria-label` / `title`. **Scatter and play** is a round replay control when assembled/won.
+**Always visible:** progress capsule, timer/record glass pill, hold Peek.  
+**Top-left tab:** chevron slides the Map button out; tap again to hide.  
+**Bottom-right tab:** chevron slides the tool row in beside it (Infinite, 20s, Area, sArea, Hint), along the bottom edge so it does not cover the board. Labels are `aria-label` / `title`. After a hold-tool is used, the tray hides. **Scatter and play** is a round replay control when assembled/won; the tray opens on win.
 
-HUD `pointer-events` are on **buttons only**, not the full-width bars, so the canvas stays hittable.
+HUD `pointer-events` are on **tabs, open buttons, Peek, and timer chips only**, not the full-width bars, so the canvas stays hittable.
 
 ### 7.4 Assemble
 
 1. Drag a piece (pop SFX, slight scale-up).
 2. Short drag (`< 10px`) on release = **rotate 90°** (click SFX).
-3. Release near the correct slot, **upright**, within **30px** → snap (snap SFX), `placePiece`.
-4. Solved sprites move to the solved layer and lose interaction.
+3. Release near the correct slot, **upright**, within **30px** → snap (two-note chime), `placePiece`, ink/coral/gold outline along the jigsaw shape.
+4. Solved sprites move to the solved layer and lose interaction. Hint uses the same outline glow when the piece locks.
 
 Pan: drag empty space. Pinch: two fingers, zoom 0.15–3. Camera is disabled while a HUD tool is held. In-level sky matches the hub (`#6ec8ff`); pieces scatter off the photo; the opening view fits the whole scatter so every piece is on screen.
 
