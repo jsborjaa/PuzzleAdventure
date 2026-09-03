@@ -13,12 +13,13 @@ Puzzle Adventure is a **portrait-first jigsaw** for phones. Players assemble a p
 | | |
 |---|---|
 | **Platforms** | Web (dev + play), Android via Capacitor. iOS is not added yet (Mac + Xcode later). |
-| **Campaign** | 14 sequential levels (`level_1` … `level_14`). Level 1 unlocked; each clear unlocks the next. |
-| **Events** | Always-unlocked Diario (200), Semanal (500), Mensual (1000) pieces. Same rules, separate saves. |
-| **Session** | One in-progress campaign save. Events save per event id. Completed puzzles open assembled with **Desarmar y jugar**. |
-| **Times** | Best / last / clear count per level id. Shown on menu cards and HUD. **No global table UI yet.** |
-| **Economy** | Commons farm from campaign first-clear and Daily; rares from Weekly/Monthly and crafting (4 Area → sArea, 10×20s → infinite). Store/ads are a shortcut (no Play Billing yet). |
-| **Not in the game** | Pockets, CameraTool, live IAP, ad SDK, accounts, leaderboards, daily rotation of event art, haptics. |
+| **Campaign** | Sequential levels (`level_1` …). Bundled seed is 14; live catalog is Supabase `levels` with a sliding map window (~20 thumbs). |
+| **Events** | Calendar catalog (`event_puzzles`), apart from the map. Diario / Semanal / Mensual for the current UTC day / ISO week / month. Always unlocked. |
+| **Session** | One in-progress campaign save. Events save per occurrence id. Completed puzzles open assembled with **Desarmar y jugar**. |
+| **Times** | Personal best / last / clear count per level id in localStorage (never evicted with photos). Global ranking in Supabase `scores`. Win card champion cup → top 10 + own rank. |
+| **Economy** | Commons farm from campaign first-clear (1 random common) and Daily; rares from Weekly/Monthly and crafting. Store can **simulate** IAP locally (`SIMULATE_IAP`). |
+| **Identity** | Anonymous Supabase session + optional nickname in Settings. No email login. |
+| **Not in the game** | Pockets, CameraTool, live Play Billing, ad SDK, haptics. |
 | **Languages** | English, Español, Deutsch, Français, Português. Menu picker. First launch follows the device, else English. |
 
 ---
@@ -30,6 +31,8 @@ npm install
 npm run dev          # http://localhost:5173/
 npm test             # vitest, domain only
 npm run build
+npm run ingest -- content/campaign
+npm run ingest:events -- content/events/2026-09
 ```
 
 Android (needs Android Studio / SDK):
@@ -47,7 +50,7 @@ npm run build && npx cap sync
 npx cap open ios
 ```
 
-After swapping files in `public/`, hard-refresh in **dev**. Dev skips the IndexedDB atlas cache and cache-busts image URLs so replacements show up.
+Copy `.env.example` to `.env.local` and add a Supabase project if you want remote catalog + rankings. Enable **Anonymous** sign-in (Authentication → Providers) and run `supabase/migrations/20260903000000_init.sql`. Without keys, the bundled 14+3 still plays.
 
 ---
 
@@ -62,14 +65,16 @@ After swapping files in `public/`, hard-refresh in **dev**. Dev skips the Indexe
 | Tests | Vitest (node) | `src/**/*.test.ts` — Phaser-free domain only |
 | Native shell | Capacitor 6 | App id `com.puzzleadventure.app` |
 | Android | Capacitor Android project | Portrait lock, status bar `#6ec8ff` |
-| Persistence | `localStorage` | Progress, session, power-ups, times, locale, **period claims** |
+| Persistence | `localStorage` | Progress, session, power-ups, times, locale, claims, last played, nickname |
+| Cloud | Supabase (optional) | Catalog, event art, anonymous auth, global scores. Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
 | i18n | One typed catalog | `src/i18n/messages.ts` — `t('hud.menu')`. No i18next. |
 | Piece textures | Canvas atlases + IndexedDB | DB `puzzle-adventure-atlas-v2`; skipped in `import.meta.env.DEV` |
+| Image cache | IndexedDB `puzzle-adventure-images-v1` | Thumbs/full for the visible window; eviction does **not** touch scores |
 | Audio | Web Audio oscillators | Pop / snap / click / win. No sound files. |
 
 **HTML shell** (`index.html`): `#app` → `#game-container` (Phaser) + `#ui-layer` (menu, HUD). Viewport is `viewport-fit=cover`, no user scale.
 
-**Phaser boot:** `src/main.ts` → `boot()` → `Phaser.Game(GameConfig)` with **only** `BootScene`. Menu and Game scenes are lazy-imported after images load.
+**Phaser boot:** `src/main.ts` → `boot()` → `Phaser.Game(GameConfig)` with **only** `BootScene`. Menu and Game scenes are lazy-imported; campaign photos load on demand.
 
 ---
 
@@ -107,11 +112,15 @@ src/main.ts     Entry (initI18n before Phaser)
 | `src/domain/snapRules.ts` | Angle 0 + distance `< 30px` |
 | `src/domain/inventory.ts` | Consume / craft / applyPack |
 | `src/domain/grid.ts` | Grid math, `worldToCell`, `clampSelection`, `deviceMemoryGb` |
-| `src/data/ProgressStore.ts` | Unlock index, sessions, power-ups, times, locale, claims |
+| `src/data/ProgressStore.ts` | Unlock index, sessions, power-ups, times, locale, claims, last played, nickname |
 | `src/domain/quality.ts` | Cap huge puzzles on low-RAM devices |
 | `src/domain/win.ts` | `isWon` / `countSolved` |
 | `src/domain/timer.ts` | Elapsed ms + `m:ss` / `h:mm:ss` |
-| `src/data/Levels.ts` | 14 campaign + 3 events, image URLs, difficulty |
+| `src/data/Levels.ts` | Bundled 14+3 seed catalog |
+| `src/data/LevelCatalog.ts` | Sliding campaign window + current events (Supabase or seed) |
+| `src/data/imageCache.ts` | Thumb/full IndexedDB + eviction |
+| `src/data/cloud/` | Supabase client, anonymous auth, leaderboard RPCs |
+| `src/domain/campaignDifficulty.ts` | Piece-count curve (shared with ingest) |
 | `src/engine/GameRuntime.ts` | Wires session + board + HUD + tools; chooses play mode |
 | `src/engine/board/` | Sprites, layers, guide image |
 | `src/engine/pipeline/` | Masked piece atlas, cache, jigsaw path |
@@ -144,7 +153,7 @@ Leave / hide tab → session.save() (skipped if replay or already won)
 
 ### 5.1 Campaign (`LEVELS`)
 
-Generated in `src/data/Levels.ts` from `AVAILABLE_IMAGES_COUNT = 14`.
+Generated in `src/data/Levels.ts` from `BUNDLED_CAMPAIGN_COUNT = 14` as an **offline seed**. Live games fetch `get_level_window` from Supabase. Thumbs for the map; one full JPEG on Play. Photo eviction never deletes times.
 
 | Level | Id | Pieces | Image |
 |---|---|---|---|
@@ -157,13 +166,17 @@ Generated in `src/data/Levels.ts` from `AVAILABLE_IMAGES_COUNT = 14`.
 | 10 | `level_10` | 64 | |
 | 11–14 | | shuffled bag of 36/64/100 (seeded per decade) | through `Stage_14.jpg` |
 
-Phaser texture keys: `stage_1` … `stage_14`. Titles include a Spanish difficulty tag (Iniciación / Fácil / Medio / Difícil).
+Phaser texture keys: `img_level_N` / `img_<event id>`. Titles include a localized difficulty tag.
 
 Menu card badge (`diffLabel`): 16→C, 36→B, 64→A, 100→S, 200→SS, 500→SSS, 1000→SSSS.
 
-**Adding a campaign level:** drop `public/assets/Stage_N.jpg`, increment `AVAILABLE_IMAGES_COUNT`, and extend `getDifficultyForLevel` if the count is not covered by the decade bag.
+**Adding a campaign level:** drop a numbered JPEG in `content/campaign/` (e.g. `0015.jpg`) and run `npm run ingest`. Piece count comes from `getDifficultyForLevel`. Optional `public/assets/Stage_N.jpg` only for the bundled seed.
 
-### 5.2 Events (`SPECIAL_LEVELS`)
+### 5.2 Events (`event_puzzles`)
+
+Apart from the map. Ids are occurrence-scoped (`event_daily_2026-09-03`) so each day has its own récord and leaderboard. Upload a whole month with `npm run ingest:events -- content/events/2026-09` (`daily/01.jpg` …, `weekly/W36.jpg`, `monthly.jpg`). Do **not** delete last month’s rows on update. Optional `--prune-art-before 2026-07` deletes old **art** only.
+
+Fallback seed (no cloud / missing day): `SPECIAL_LEVELS` static JPGs under `public/esp_events/`.
 
 Always unlocked. Not part of the campaign index.
 
@@ -173,7 +186,7 @@ Always unlocked. Not part of the campaign index.
 | `event_weekly` | Semanal | 500 | `public/esp_events/weekly/Stage_S.jpg` |
 | `event_monthly` | Mensual | 1000 | `public/esp_events/monthly/Stage_M.jpg` |
 
-Art is **static** (not actually rotated by calendar). Quality gate may reduce 200+ piece counts to 200 when `navigator.deviceMemory < 4`.
+Fallback seed ids (`event_daily` / `event_weekly` / `event_monthly`) still exist for offline play. Live occurrence ids include the period key. Quality gate may reduce 200+ piece counts to 200 when `navigator.deviceMemory < 4`.
 
 ### 5.3 Unlocking
 
@@ -211,17 +224,17 @@ A leftover fully-solved save is **not** treated as resume (`inProgress` requires
 ### 7.1 Boot
 
 1. DOM splash (logo + bar) in `#ui-layer` while `BootScene` loads campaign + event images (dev URLs get `?t=timestamp`).
-2. Lazy-loads `MenuScene` and `GameScene`.
-3. Starts the hub (menu).
+2. Lazy-loads `MenuScene` and `GameScene`, signs in anonymously if cloud is configured, loads the catalog window.
+3. Starts the hub (menu). Campaign images are **not** preloaded.
 
 ### 7.2 Hub (menu)
 
 Portrait home with Candy Crush-like chrome around the photo grid:
 
 - **Top:** stacked logo · inventory chips (hint / area / 20s, open Store) · Settings gear.
-- **Map tab:** 14 photo cards. Locked cards show a glossy `?`. Current unlock pulses. Best time as a gold pill.
+- **Map tab:** photo cards for the **visible window** (~20 around the current center), not the whole campaign. Position line `n / total`. Chevrons shift the window. Locked cards show a glossy `?`. Current unlock pulses. Best time as a gold pill.
 - Tap an unlocked card → **start sheet** (thumbnail, piece count, best time, **Play**).
-- **Events tab:** Daily / Weekly / Monthly as large island cards.
+- **Events tab:** current Daily / Weekly / Monthly from the calendar catalog (seed fallback if none).
 - **Store / Workshop tabs:** full pages (not overlays). Craft and SKUs unchanged.
 - **Bottom dock:** Map · Events · Store · Workshop.
 - **Settings:** language. **Reset** / **Reset events** only in `import.meta.env.DEV`.
@@ -249,7 +262,7 @@ Pan: drag empty space. Pinch: two fingers, zoom 0.15–3. Camera is disabled whi
 - Campaign: `completeLevel`. If the unlock index **increases**, grant first-clear pack.
 - Events: grant the period pack **once** (UTC day / ISO week / `YYYY-MM`). Replay and already-claimed periods: no pack.
 - In-progress session for that puzzle is **cleared**.
-- Overlay: cream win card (pop-in), time, récord / nuevo récord, **reward chips if granted**, **Scatter and play**, **Map**.
+- Overlay: cream win card (pop-in), time, récord / nuevo récord, **champion cup** (global rank; tap for top 10 + own row if not top 10), **reward chips if granted**, **Scatter and play**, **Map**.
 - HUD also gains **Desarmar y jugar** so a second attempt does not require leaving.
 
 Leaving after a win does **not** write a solved session back (that was the “button disappeared until I visited another level” bug).
@@ -299,7 +312,7 @@ Hold-tools track **window** `pointermove`. Confirm uses Phaser `transformPointer
 
 | Source | When | Pack |
 |---|---|---|
-| Campaign first clear | `completeLevel` actually bumps unlock | `{ hint: 1, area: 1, reveal_temp: 1 }` |
+| Campaign first clear | `completeLevel` actually bumps unlock | 1 random common (`campaignFirstClearPack`) |
 | Daily | first win this UTC day | `{ hint: 2, area: 2, reveal_temp: 2 }` |
 | Weekly | first win this ISO week | `{ hint: 2, area: 4, sarea: 1 }` |
 | Monthly | first win this `YYYY-MM` | `{ hint: 3, reveal_temp: 5, sarea: 2, reveal_perm: 1 }` |
@@ -309,17 +322,17 @@ Hold-tools track **window** `pointermove`. Confirm uses Phaser `transformPointer
 
 Period keys live in `puzzle_adventure_claims_v1`. Replay and a second win in the same period show the existing win card with **no** reward list.
 
-**Store** is a shortcut for the same packs, not a second currency. IAP buttons are “Coming soon”. Ad simulate is **DEV-only**.
+**Store** is a shortcut for the same packs. With `SIMULATE_IAP` (currently true), Handy / Rare buttons grant locally after confirm. Flip the flag off when Play Billing lands. Ad simulate is **DEV-only**.
 
 Replay mode: tools and reveals that consume charges are no-ops. **Ver** (eye hold) still works.
 
 ### 8.4 Timer and times
 
 - Tick from Phaser `update` delta. HUD refreshes ~every 200ms.
-- On each win: `{ bestMs, lastMs, clears }` in `puzzle_adventure_times_v1`.
-- HUD shows **Récord**; overlay shows this run vs best.
+- On each win: `{ bestMs, lastMs, clears }` in `puzzle_adventure_times_v1` (kept forever).
+- HUD shows **Récord**; overlay shows this run vs best plus champion cup.
 - Menu cards show best if present.
-- **Future global table:** read `ProgressStore` times (add a `getTimes()` if you need the full map). Do not invent a second store.
+- Global table: `submit_score` / `get_leaderboard` in Supabase. Personal store stays the device récord.
 
 ### 8.5 Quality gate
 
@@ -364,8 +377,11 @@ All player-facing copy lives in [`src/i18n/messages.ts`](../src/i18n/messages.ts
 | `puzzle_adventure_powerups_v1` | Five counts. Missing keys filled from `DEFAULT_POWERUPS`. |
 | `puzzle_adventure_times_v1` | Map of level id → `{ bestMs, lastMs, clears }`. |
 | `puzzle_adventure_locale_v1` | Saved locale id (`en` / `es` / `de` / `fr` / `pt`). Absent = follow device, else `en`. |
-| `puzzle_adventure_claims_v1` | `{ eventPeriods, adsDate, adsCount }`. Event id → period key; ads reset each UTC day. |
+| `puzzle_adventure_claims_v1` | `{ eventPeriods, adsDate, adsCount }`. Event **type** → period key; ads reset each UTC day. |
+| `puzzle_adventure_last_played_v1` | Last started level id (map pin + cache keep). |
+| `puzzle_adventure_nickname_v1` | Optional leaderboard name. |
 | IndexedDB `puzzle-adventure-atlas-v2` | Packed piece PNGs + frames. |
+| IndexedDB `puzzle-adventure-images-v1` | Cached thumbs/full for the visible window. |
 
 `SavedSession` version **3**: `{ version, levelId, pieces: [{ id, x, y, angle, isSolved }], revealPermanent, elapsedMs, lastUpdated }`.
 
@@ -413,6 +429,8 @@ Piece interaction tap threshold: **10px** (`PieceInteraction.ts`). Rotate deboun
 | `ProgressStore.test.ts` | Claims, ad cap, craft |
 | `win.test.ts` | All solved |
 | `i18n.test.ts` | Interpolation, `pt-BR`→`pt`, saved locale, English fallback |
+| `catalogWindow.test.ts` | Map window clamp / last-played pin |
+| `campaignDifficulty.test.ts` | Piece-count curve |
 
 Engine, HUD, and Capacitor are **not** unit-tested. After HUD/layout changes, verify in the browser at `http://localhost:5173/`.
 
@@ -439,14 +457,14 @@ Use this as the backlog seed, not as committed scope.
 
 | Item | Status now | Suggested direction |
 |---|---|---|
-| **Global times table** | Data exists (`times_v1`, HUD + menu cards) | New menu screen reading `ProgressStore`; do not add a second store |
-| **Play Billing / ads SDK** | SKUs listed; DEV simulate-ad | Wire IAP; replace simulate with rewarded ads |
-| **Event rotation** | Static JPGs | Calendar-based art / ids; keep `eventType` on `LevelData` |
+| **Global times table** | Win-card cup + top 10 | — |
+| **Play Billing / ads SDK** | SKUs listed; simulate IAP + DEV simulate-ad | Wire IAP; replace simulate with rewarded ads |
+| **Event rotation** | Calendar `event_puzzles`; monthly ingest | Fill a full month of art |
 | **iOS** | Not added | `npx cap add ios` on a Mac |
 | **Play Store** | No | Signing, store listing, privacy |
 | **Haptics** | Unused | Capacitor Haptics on snap/win |
 | **Sound assets** | Synth only | Optional files; keep `AudioService` as the single API |
-| **Accounts / cloud** | None | If added, wrap `ProgressStore` rather than scattering `localStorage` |
+| **Accounts / cloud** | Anonymous + nickname | Optional real login later |
 | **Dev buttons in production** | Reset / Reset events in Settings, DEV only | — |
 | **Reset vs times** | Reset progress does not clear campaign times | Product decision: wipe or keep récords |
 | **Campaign session slot** | One level at a time | Per-level campaign saves if players juggle levels |
@@ -455,9 +473,9 @@ Use this as the backlog seed, not as committed scope.
 
 ## 14. Common change recipes
 
-**New campaign image for an existing slot:** replace `public/assets/Stage_N.jpg`, hard-refresh in dev.
+**New campaign image for an existing slot:** replace `public/assets/Stage_N.jpg` (seed) or re-ingest the numbered file.
 
-**New event:** add `LevelData` in `SPECIAL_LEVELS` + file under `public/esp_events/`. BootScene already loads all specials.
+**New event month:** `content/events/YYYY-MM/` then `npm run ingest:events`.
 
 **New power-up:** add one `POWERUP_DEFS` row (`id`, `tier`, `family`, optional `craftsTo` / `craftCost`), extend `PowerupKey` + `DEFAULT_POWERUPS` in `product.ts`, HUD control + session command. Grants and store iterate the catalog.
 

@@ -1,7 +1,10 @@
-import { LEVELS, SPECIAL_LEVELS, getLevelTitle, withDevCacheBust, type LevelData } from '../data/Levels';
+import { getLevelTitle, withDevCacheBust, type LevelData } from '../data/Levels';
+import { LevelCatalog } from '../data/LevelCatalog';
 import { ProgressStore } from '../data/ProgressStore';
+import { syncNickname } from '../data/cloud/auth';
+import { ensureImage } from '../data/imageCache';
 import { getPowerupDef, POWERUP_DEFS, STORE_SKUS, AD_COMMON_DAILY_CAP, packHasItems } from '../domain/powerups';
-import type { PowerupKey } from '../domain/product';
+import { SIMULATE_IAP, type PowerupKey } from '../domain/product';
 import { formatTimer } from '../domain/timer';
 import { getLocale, isLocaleId, setLocale, SUPPORTED_LOCALES, t, type LocaleId } from '../i18n';
 import { iconHtml, type IconName } from './icons';
@@ -89,20 +92,43 @@ export class MenuView {
 
   private mapPane() {
     const wrap = el('div');
+    const catalog = LevelCatalog.getInstance();
     const title = el('h2', 'hub-pane-title');
     title.textContent = t('menu.subtitle');
+    const pos = el('p', 'hub-pane-sub');
+    pos.textContent = t('menu.mapPosition', { n: catalog.getCenter(), total: catalog.getTotal() });
+    const nav = el('div', 'hub-map-nav');
+    const prev = el('button', 'btn btn-ghost hub-slice');
+    prev.type = 'button';
+    prev.textContent = '‹';
+    prev.title = t('menu.prevSlice');
+    prev.disabled = !catalog.canShift(-20);
+    prev.onclick = () => {
+      void catalog.shift(-20).then(() => this.renderPane());
+    };
+    const next = el('button', 'btn btn-ghost hub-slice');
+    next.type = 'button';
+    next.textContent = '›';
+    next.title = t('menu.nextSlice');
+    next.disabled = !catalog.canShift(20);
+    next.onclick = () => {
+      void catalog.shift(20).then(() => this.renderPane());
+    };
+    nav.append(prev, pos, next);
+
     const grid = el('div', 'menu-grid');
     const store = ProgressStore.getInstance();
     const currentId = currentUnlockId(store);
-    LEVELS.forEach((level, index) => {
+    catalog.getCampaignWindow().forEach((level) => {
+      const index = (level.campaignIndex ?? parseInt(level.id.replace('level_', ''), 10)) - 1;
       const unlocked = store.isLevelUnlocked(level.id);
-      const card = this.card(level, index, unlocked, store.getBestMs(level.id));
+      const card = this.card(level, Number.isFinite(index) ? index : null, unlocked, store.getBestMs(level.id));
       if (unlocked && level.id === currentId && store.getBestMs(level.id) === null) {
         card.classList.add('is-current');
       }
       grid.appendChild(card);
     });
-    wrap.append(title, grid);
+    wrap.append(title, nav, grid);
     return wrap;
   }
 
@@ -112,7 +138,9 @@ export class MenuView {
     title.textContent = t('menu.events');
     const islands = el('div', 'event-islands');
     const store = ProgressStore.getInstance();
-    SPECIAL_LEVELS.forEach((level) => islands.appendChild(this.eventIsland(level, store.getBestMs(level.id))));
+    LevelCatalog.getInstance()
+      .getEvents()
+      .forEach((level) => islands.appendChild(this.eventIsland(level, store.getBestMs(level.id))));
     wrap.append(title, islands);
     return wrap;
   }
@@ -211,8 +239,18 @@ export class MenuView {
         body.textContent = formatPack(sku.pack);
         const hint = el('p');
         hint.textContent = sku.id === 'pack_handy' ? t('store.packHandyHint') : t('store.packRareHint');
-        action.textContent = t('store.iapSoon');
-        action.disabled = true;
+        if (SIMULATE_IAP) {
+          action.textContent = t('store.simulateBuy');
+          action.onclick = () => {
+            if (!confirm(t('store.simulateConfirm'))) return;
+            ProgressStore.getInstance().grantPack(sku.pack);
+            this.syncChips();
+            status.textContent = t('store.granted', { name: formatPack(sku.pack) });
+          };
+        } else {
+          action.textContent = t('store.iapSoon');
+          action.disabled = true;
+        }
         card.append(name, body, hint, action);
       }
       wrap.appendChild(card);
@@ -245,7 +283,19 @@ export class MenuView {
         this.host.innerHTML = '';
         new MenuView(this.host, this.onPlay);
       };
-      sheet.append(title, langLabel, select);
+      const nickLabel = el('p');
+      nickLabel.textContent = t('menu.nickname');
+      const nickHint = el('p');
+      nickHint.textContent = t('menu.nicknameHint');
+      const nick = document.createElement('input');
+      nick.type = 'text';
+      nick.maxLength = 24;
+      nick.value = ProgressStore.getInstance().getNickname() ?? '';
+      nick.setAttribute('aria-label', t('menu.nickname'));
+      nick.onchange = () => {
+        void syncNickname(nick.value);
+      };
+      sheet.append(title, langLabel, select, nickLabel, nickHint, nick);
 
       if (import.meta.env.DEV) {
         const dev = el('p');
@@ -287,8 +337,11 @@ export class MenuView {
     const best = store.getBestMs(level.id);
     this.openSheet((sheet, close) => {
       const img = document.createElement('img');
-      img.src = withDevCacheBust(level.imageUrl);
+      img.src = withDevCacheBust(level.thumbUrl ?? level.imageUrl);
       img.alt = getLevelTitle(level);
+      void ensureImage('thumb', level.id, level.thumbUrl ?? level.imageUrl).then((src) => {
+        img.src = withDevCacheBust(src);
+      });
       const title = el('h2');
       title.textContent = index !== null ? t('level.title', { n: index + 1 }) : getLevelTitle(level);
       const meta = el('div', 'hub-sheet-meta');
@@ -330,8 +383,11 @@ export class MenuView {
     btn.disabled = !unlocked;
     if (unlocked) {
       const img = document.createElement('img');
-      img.src = withDevCacheBust(level.imageUrl);
+      img.src = withDevCacheBust(level.thumbUrl ?? level.imageUrl);
       img.alt = title;
+      void ensureImage('thumb', level.id, level.thumbUrl ?? level.imageUrl).then((src) => {
+        img.src = withDevCacheBust(src);
+      });
       btn.appendChild(img);
       btn.onclick = () => this.openStart(level, index);
     } else {
@@ -356,8 +412,11 @@ export class MenuView {
     const btn = el('button', 'event-island');
     btn.type = 'button';
     const img = document.createElement('img');
-    img.src = withDevCacheBust(level.imageUrl);
+    img.src = withDevCacheBust(level.thumbUrl ?? level.imageUrl);
     img.alt = title;
+    void ensureImage('thumb', level.id, level.thumbUrl ?? level.imageUrl).then((src) => {
+      img.src = withDevCacheBust(src);
+    });
     const meta = el('div', 'event-island-meta');
     const name = el('span');
     name.textContent = title;

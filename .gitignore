@@ -21,3 +21,13 @@ Thumbs.db
 # Env
 .env
 .env.*
+!.env.example
+
+# Local photo drops for ingest (do not commit the JPEGs)
+content/**/*.jpg
+content/**/*.jpeg
+content/**/*.png
+content/**/*.webp
+content/**/*.gif
+!content/**/.gitkeep
+!content/README.md

@@ -28,3 +28,6 @@ export const DEFAULT_POWERUPS: Record<PowerupKey, number> = {
   sarea: 0,
   reveal_perm: 0,
 };
+
+/** Temporary local grants for IAP SKUs until Play Billing is wired. */
+export const SIMULATE_IAP = true;

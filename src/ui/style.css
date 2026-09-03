@@ -454,6 +454,76 @@ body {
   box-shadow: 0 3px 0 #e8c48a;
 }
 
+.hud-cup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px auto 4px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 3px solid #fff;
+  background: linear-gradient(180deg, #ffe28a, #f0b429);
+  color: var(--ink);
+  font-weight: 800;
+  box-shadow: 0 4px 0 #c98412;
+  pointer-events: auto;
+}
+
+.hud-cup svg {
+  width: 22px;
+  height: 22px;
+}
+
+.hud-cup.is-loading {
+  opacity: 0.7;
+}
+
+.hud-cup.is-offline {
+  background: #d7d0c4;
+  box-shadow: 0 4px 0 #b5aa9a;
+}
+
+.hud-cup-rank {
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-board-overlay {
+  z-index: 6;
+}
+
+.hud-board {
+  text-align: left;
+  max-height: min(70vh, 520px);
+  overflow: auto;
+}
+
+.hud-board-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.hud-board-list li {
+  display: grid;
+  grid-template-columns: 2.4em 1fr auto;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #ead9b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-board-list li.is-you {
+  font-weight: 800;
+  color: var(--coral);
+}
+
+.hud-board-empty,
+.hud-board-you {
+  margin: 0 0 12px;
+  color: var(--ink-soft);
+}
+
 .hud-toast {
   position: absolute;
   top: calc(var(--safe-top) + 56px);
@@ -618,6 +688,25 @@ body {
   text-align: center;
   color: rgba(255, 255, 255, 0.9);
   font-size: 14px;
+}
+
+.hub-map-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.hub-map-nav .hub-pane-sub {
+  margin: 0;
+  min-width: 5.5em;
+}
+
+.hub-slice {
+  min-width: 44px;
+  font-size: 22px;
+  line-height: 1;
 }
 
 .menu-grid {
@@ -802,7 +891,8 @@ body {
   margin-top: 8px;
 }
 
-.hub-sheet select {
+.hub-sheet select,
+.hub-sheet input[type='text'] {
   min-height: 44px;
   border-radius: 14px;
   border: 3px solid var(--cream-edge);
@@ -811,6 +901,8 @@ body {
   padding: 8px 10px;
   background: #fff;
   color: var(--ink);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .menu-stock {

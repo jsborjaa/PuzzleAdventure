@@ -4,9 +4,9 @@ import type { PowerupCounts } from '../domain/inventory';
 import { applyPack, craft, createInventory } from '../domain/inventory';
 import {
   AD_COMMON_DAILY_CAP,
+  campaignFirstClearPack,
   eventGrant,
   eventPeriodKey,
-  GRANT_CAMPAIGN_FIRST_CLEAR,
   randomCommonId,
   utcDateKey,
   type PowerupPack,
@@ -19,6 +19,8 @@ const TIMES_KEY = 'puzzle_adventure_times_v1';
 const POWERUPS_KEY = 'puzzle_adventure_powerups_v1';
 const LOCALE_KEY = 'puzzle_adventure_locale_v1';
 const CLAIMS_KEY = 'puzzle_adventure_claims_v1';
+const LAST_PLAYED_KEY = 'puzzle_adventure_last_played_v1';
+const NICKNAME_KEY = 'puzzle_adventure_nickname_v1';
 const LEGACY_SESSION_KEY = 'puzzle_adventure_active_session';
 const LEGACY_SPECIAL_KEY = 'puzzle_adventure_special_sessions_v1';
 const POCKET_KEY_PREFIX = 'pockets:';
@@ -64,6 +66,8 @@ export class ProgressStore {
   private powerups: PowerupCounts = createInventory();
   private times: Record<string, LevelTime> = {};
   private locale: string | null = null;
+  private lastPlayedLevelId: string | null = null;
+  private nickname: string | null = null;
   private claims: EconomyClaims = { eventPeriods: {}, adsDate: '', adsCount: 0 };
 
   constructor(private storage: Storage = localStorage) {
@@ -72,6 +76,8 @@ export class ProgressStore {
     this.loadPowerups();
     this.loadTimes();
     this.loadLocale();
+    this.loadLastPlayed();
+    this.loadNickname();
     this.loadClaims();
     this.purgePockets();
   }
@@ -174,6 +180,36 @@ export class ProgressStore {
     this.storage.setItem(LOCALE_KEY, id);
   }
 
+  private loadLastPlayed() {
+    const stored = this.storage.getItem(LAST_PLAYED_KEY);
+    this.lastPlayedLevelId = stored && stored.length > 0 ? stored : null;
+  }
+
+  getLastPlayedLevelId(): string | null {
+    return this.lastPlayedLevelId;
+  }
+
+  setLastPlayedLevelId(id: string) {
+    this.lastPlayedLevelId = id;
+    this.storage.setItem(LAST_PLAYED_KEY, id);
+  }
+
+  private loadNickname() {
+    const stored = this.storage.getItem(NICKNAME_KEY);
+    this.nickname = stored && stored.length > 0 ? stored : null;
+  }
+
+  getNickname(): string | null {
+    return this.nickname;
+  }
+
+  setNickname(name: string) {
+    const trimmed = name.trim().slice(0, 24);
+    this.nickname = trimmed.length > 0 ? trimmed : null;
+    if (this.nickname) this.storage.setItem(NICKNAME_KEY, this.nickname);
+    else this.storage.removeItem(NICKNAME_KEY);
+  }
+
   private loadClaims() {
     const stored = this.storage.getItem(CLAIMS_KEY);
     if (!stored) {
@@ -221,10 +257,11 @@ export class ProgressStore {
     return false;
   }
 
-  tryClaimCampaignFirstClear(didUnlock: boolean): PowerupPack | null {
+  tryClaimCampaignFirstClear(didUnlock: boolean, rng?: () => number): PowerupPack | null {
     if (!didUnlock) return null;
-    this.grantPack(GRANT_CAMPAIGN_FIRST_CLEAR);
-    return { ...GRANT_CAMPAIGN_FIRST_CLEAR };
+    const pack = campaignFirstClearPack(rng);
+    this.grantPack(pack);
+    return { ...pack };
   }
 
   tryClaimEventReward(
@@ -232,10 +269,11 @@ export class ProgressStore {
     eventId: string,
     nowMs: number,
   ): PowerupPack | null {
+    void eventId;
     const period = eventPeriodKey(eventType, nowMs);
-    if (this.claims.eventPeriods[eventId] === period) return null;
+    if (this.claims.eventPeriods[eventType] === period) return null;
     const pack = eventGrant(eventType);
-    this.claims.eventPeriods[eventId] = period;
+    this.claims.eventPeriods[eventType] = period;
     this.saveClaims();
     this.grantPack(pack);
     return { ...pack };

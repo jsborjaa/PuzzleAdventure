@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStorage, ProgressStore } from './ProgressStore';
-import { GRANT_CAMPAIGN_FIRST_CLEAR, GRANT_MONTHLY } from '../domain/powerups';
+import { GRANT_MONTHLY } from '../domain/powerups';
 
 describe('ProgressStore economy', () => {
   it('grants campaign first-clear only when unlock increases', () => {
     const store = new ProgressStore(new MemoryStorage());
     const before = store.getPowerups();
     expect(store.completeLevel(0)).toBe(true);
-    expect(store.tryClaimCampaignFirstClear(true)).toEqual(GRANT_CAMPAIGN_FIRST_CLEAR);
+    expect(store.tryClaimCampaignFirstClear(true, () => 0)).toEqual({ hint: 1 });
     expect(store.getPowerups().hint).toBe(before.hint + 1);
+    expect(store.getPowerups().area).toBe(before.area);
     expect(store.completeLevel(0)).toBe(false);
     expect(store.tryClaimCampaignFirstClear(false)).toBeNull();
     expect(store.getPowerups().hint).toBe(before.hint + 1);

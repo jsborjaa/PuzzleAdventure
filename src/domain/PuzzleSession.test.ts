@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStorage, ProgressStore } from '../data/ProgressStore';
 import { buildJigsawLayout } from './jigsaw';
-import { makeScatterBounds, PuzzleSession } from './PuzzleSession';
+import { packEntries, type PowerupPack } from './powerups';
 import { makePieceId } from './pieceId';
+import { makeScatterBounds, PuzzleSession } from './PuzzleSession';
 
 function makeSession(mode: 'fresh' | 'resume' | 'replay' = 'fresh', extras: Partial<ConstructorParameters<typeof PuzzleSession>[0]> = {}) {
   const store = new ProgressStore(new MemoryStorage());
@@ -111,12 +112,13 @@ describe('PuzzleSession', () => {
       if (e.type === 'won') rewards.push(e.rewards);
     });
     solveAll(session);
-    expect(rewards[0]).toEqual({ hint: 1, area: 1, reveal_temp: 1 });
-    expect(store.getPowerups()).toMatchObject({
-      hint: before.hint + 1,
-      area: before.area + 1,
-      reveal_temp: before.reveal_temp + 1,
-    });
+    const pack = rewards[0] as PowerupPack;
+    const entries = packEntries(pack);
+    expect(entries).toHaveLength(1);
+    expect(['hint', 'area', 'reveal_temp']).toContain(entries[0]!.id);
+    expect(entries[0]!.n).toBe(1);
+    const after = store.getPowerups();
+    expect(after[entries[0]!.id]).toBe(before[entries[0]!.id] + 1);
 
     const again = makeSession('fresh', { store });
     const second: unknown[] = [];
@@ -125,7 +127,7 @@ describe('PuzzleSession', () => {
     });
     solveAll(again);
     expect(second[0]).toBeNull();
-    expect(store.getPowerups().hint).toBe(before.hint + 1);
+    expect(store.getPowerups()).toEqual(after);
   });
 
   it('does not grant on replay', () => {

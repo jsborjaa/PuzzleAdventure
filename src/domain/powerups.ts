@@ -27,11 +27,9 @@ export function getPowerupDef(id: PowerupKey): PowerupDef | undefined {
   return POWERUP_DEFS.find((d) => d.id === id);
 }
 
-export const GRANT_CAMPAIGN_FIRST_CLEAR: PowerupPack = {
-  hint: 1,
-  area: 1,
-  reveal_temp: 1,
-};
+export function campaignFirstClearPack(rng: () => number = Math.random): PowerupPack {
+  return { [randomCommonId(rng)]: 1 };
+}
 
 export const GRANT_DAILY: PowerupPack = { hint: 2, area: 2, reveal_temp: 2 };
 export const GRANT_WEEKLY: PowerupPack = { hint: 2, area: 4, sarea: 1 };

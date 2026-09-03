@@ -9,13 +9,14 @@ import type { ScatterBounds } from '../domain/types';
 import { buildJigsawLayout } from '../domain/jigsaw';
 import { applyQualityGate } from '../domain/quality';
 import { makeScatterBounds, PuzzleSession } from '../domain/PuzzleSession';
-import { getLevelById } from '../data/Levels';
+import { LevelCatalog } from '../data/LevelCatalog';
 import { ProgressStore } from '../data/ProgressStore';
 import { GameHud } from '../ui/GameHud';
 import { AudioService } from './audio/AudioService';
 import { PuzzleBoard } from './board/PuzzleBoard';
 import { CameraController } from './input/CameraController';
 import { attachPieceInteraction } from './input/PieceInteraction';
+import { loadLevelTexture } from './loadLevelTexture';
 import { AreaTool } from './tools/AreaTool';
 import { HintTool } from './tools/HintTool';
 import { ToolManager } from './tools/ToolManager';
@@ -36,14 +37,21 @@ export class GameRuntime {
   ) {}
 
   async start() {
-    const level = getLevelById(this.data.levelId);
+    const catalog = LevelCatalog.getInstance();
+    await catalog.ensureLoaded();
+    const level = catalog.getById(this.data.levelId);
     if (!level) {
       this.scene.scene.start('MenuScene');
       return;
     }
 
+    const store = ProgressStore.getInstance();
+    store.setLastPlayedLevelId(level.id);
+
+    const loaded = await loadLevelTexture(this.scene, level);
+    if (this.destroyed) return;
     const texture = this.scene.textures.get(level.imageKey);
-    if (!this.scene.textures.exists(level.imageKey) || texture.key === '__MISSING') {
+    if (!loaded || !this.scene.textures.exists(level.imageKey) || texture.key === '__MISSING') {
       console.error('Level image missing', level.imageKey);
       this.scene.scene.start('MenuScene');
       return;
@@ -53,7 +61,6 @@ export class GameRuntime {
     const gated = applyQualityGate(requested);
     const layout = buildJigsawLayout(level.id, img.width, img.height, gated.count);
     const bounds = makeScatterBounds(img.width, img.height);
-    const store = ProgressStore.getInstance();
     const special = !!level.eventType;
     const saved = special ? store.getSpecialSession(level.id) : store.getSession();
     const completed = store.getBestMs(level.id) !== null || (!special && store.isLevelCompleted(level.id));
@@ -116,7 +123,9 @@ export class GameRuntime {
 
     this.unsub = this.session.on((event) => {
       if (event.type === 'revealChanged') this.board.setGuideAlpha(this.session.guideAlpha);
-      if (event.type === 'won') AudioService.getInstance().playWin();
+      if (event.type === 'won') {
+        AudioService.getInstance().playWin();
+      }
       if (event.type === 'pieceMoved' || event.type === 'pieceRotated') {
         const state = this.session.getPiece(event.id);
         if (state) this.board.syncSprite(state);

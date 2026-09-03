@@ -2,6 +2,7 @@ import { formatTimer } from '../domain/timer';
 import type { PowerupKey, ToolId } from '../domain/product';
 import { packEntries, packHasItems, type PowerupPack } from '../domain/powerups';
 import { PuzzleSession } from '../domain/PuzzleSession';
+import { fetchLeaderboard, submitScore, type Leaderboard } from '../data/cloud/leaderboard';
 import { t } from '../i18n';
 import { iconHtml, type IconName } from './icons';
 import { powerupName } from './powerupLabel';
@@ -296,6 +297,13 @@ export class GameHud {
       : t('hud.record', { time: formatTimer(event.bestMs) });
     if (event.isRecord) best.classList.add('is-record');
     card.append(title, time, best);
+    const cup = el('button', 'hud-cup is-loading');
+    cup.type = 'button';
+    cup.innerHTML = iconHtml('cup');
+    cup.disabled = true;
+    cup.title = t('rank.open');
+    cup.setAttribute('aria-label', t('rank.open'));
+    card.appendChild(cup);
     if (packHasItems(event.rewards)) {
       const rewardsTitle = el('p', 'hud-rewards-title');
       rewardsTitle.textContent = t('hud.rewardsTitle');
@@ -314,6 +322,70 @@ export class GameHud {
     card.append(actions);
     this.overlay.appendChild(card);
     this.root.appendChild(this.overlay);
+    void this.loadBoard(event.isRecord, event.elapsedMs).then((board) => {
+      this.fillCup(cup, board);
+    });
+  }
+
+  private async loadBoard(isRecord: boolean, elapsedMs: number): Promise<Leaderboard | null> {
+    if (isRecord) return submitScore(this.session.levelId, elapsedMs);
+    return fetchLeaderboard(this.session.levelId);
+  }
+
+  private fillCup(cup: HTMLButtonElement, board: Leaderboard | null) {
+    cup.disabled = false;
+    cup.classList.remove('is-loading');
+    if (!board) {
+      cup.classList.add('is-offline');
+      const label = el('span', 'hud-cup-rank');
+      label.textContent = t('rank.offline');
+      cup.appendChild(label);
+      cup.onclick = () => this.toast(t('rank.offline'));
+      return;
+    }
+    const rank = board.my_rank;
+    const label = el('span', 'hud-cup-rank');
+    label.textContent = rank ? t('rank.position', { n: rank }) : t('rank.open');
+    cup.appendChild(label);
+    cup.onclick = () => this.openLeaderboard(board);
+  }
+
+  private openLeaderboard(board: Leaderboard) {
+    const overlay = el('div', 'hud-overlay hud-board-overlay');
+    const sheet = el('div', 'hud-card hud-board');
+    const title = el('h2');
+    title.textContent = t('rank.title');
+    sheet.appendChild(title);
+    if (board.top.length === 0) {
+      const empty = el('p', 'hud-board-empty');
+      empty.textContent = t('rank.empty');
+      sheet.appendChild(empty);
+    } else {
+      const list = el('ol', 'hud-board-list');
+      for (const row of board.top) {
+        const li = el('li');
+        if (board.my_rank === row.rank) li.classList.add('is-you');
+        li.innerHTML = `<span class="hud-board-rank">#${row.rank}</span><span class="hud-board-name">${escapeHtml(row.nickname)}</span><span class="hud-board-time">${formatTimer(row.best_ms)}</span>`;
+        list.appendChild(li);
+      }
+      sheet.appendChild(list);
+    }
+    if (board.my_rank !== null && board.my_rank > 10 && board.my_ms !== null) {
+      const you = el('p', 'hud-board-you');
+      you.textContent = t('rank.you', {
+        n: board.my_rank,
+        name: board.my_nickname ?? t('rank.youFallback'),
+        time: formatTimer(board.my_ms),
+      });
+      sheet.appendChild(you);
+    }
+    const close = button(t('menu.close'), 'btn btn-mint', () => overlay.remove());
+    sheet.appendChild(close);
+    overlay.appendChild(sheet);
+    overlay.addEventListener('click', (ev) => {
+      if (ev.target === overlay) overlay.remove();
+    });
+    this.root.appendChild(overlay);
   }
 
   private toast(text: string) {
@@ -322,6 +394,16 @@ export class GameHud {
     this.root.appendChild(n);
     window.setTimeout(() => n.remove(), 4000);
   }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => {
+    if (ch === '&') return '&amp;';
+    if (ch === '<') return '&lt;';
+    if (ch === '>') return '&gt;';
+    if (ch === '"') return '&quot;';
+    return '&#39;';
+  });
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string) {

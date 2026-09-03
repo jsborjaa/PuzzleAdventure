@@ -8,20 +8,25 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "cap:sync": "npm run build && npx cap sync",
+    "ingest": "tsx tools/ingest-levels.ts",
+    "ingest:events": "tsx tools/ingest-events.ts",
+    "cap:sync": "npm run build && node tools/obfuscate-android.mjs && npx cap sync",
     "android": "npm run cap:sync && npx cap run android"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
     "@capacitor/core": "^6.2.1",
     "@capacitor/status-bar": "^6.0.2",
+    "@supabase/supabase-js": "^2.114.0",
     "phaser": "^3.80.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.1",
+    "javascript-obfuscator": "^5.6.0",
+    "sharp": "^0.35.4",
+    "tsx": "^4.23.13",
     "typescript": "^5.2.2",
     "vite": "^5.1.4",
     "vitest": "^2.1.9"
   }
 }
-

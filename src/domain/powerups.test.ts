@@ -8,6 +8,7 @@ import {
   packHasItems,
   randomCommonId,
   utcDateKey,
+  campaignFirstClearPack,
 } from './powerups';
 
 describe('powerups catalog', () => {
@@ -37,5 +38,6 @@ describe('powerups catalog', () => {
       { id: 'sarea', n: 1 },
     ]);
     expect(packHasItems({})).toBe(false);
+    expect(packEntries(campaignFirstClearPack(() => 0))).toEqual([{ id: 'hint', n: 1 }]);
   });
 });
