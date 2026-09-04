@@ -4,10 +4,12 @@ import { t, type MessageKey } from '../i18n';
 
 const NAMES: Record<PowerupKey, MessageKey> = {
   hint: 'hud.hint',
+  lucky: 'hud.lucky',
   area: 'hud.area',
   sarea: 'hud.sarea',
   reveal_temp: 'hud.revealTemp',
   reveal_perm: 'hud.revealPerm',
+  solver: 'hud.solver',
 };
 
 export function powerupName(id: PowerupKey): string {

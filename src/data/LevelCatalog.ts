@@ -1,15 +1,23 @@
 import { isoWeekKey, monthKey, utcDateKey } from '../domain/powerups';
-import { LEVELS, SPECIAL_LEVELS, type LevelData } from './Levels';
-import { MAP_WINDOW_RADIUS, mergeExtraLevel, shiftCenter } from './catalogWindow';
+import { type LevelData } from './Levels';
+import { campaignIndexOf, MAP_PAGE_SIZE, pageBounds, pageForIndex, pageQuery, shiftPage, sliceByPage } from './catalogWindow';
 import { ProgressStore } from './ProgressStore';
 import { ensureImage, retainImages } from './imageCache';
 import { getSupabase, isCloudConfigured, publicImageUrl } from './cloud/supabase';
 
-const CATALOG_CACHE_KEY = 'puzzle_adventure_catalog_v1';
+const CATALOG_CACHE_KEY = 'puzzle_adventure_catalog_v3';
+
+export const EVENT_SLOT_TYPES = ['daily', 'weekly', 'monthly'] as const;
+export type EventSlotType = (typeof EVENT_SLOT_TYPES)[number];
+
+export interface EventSlot {
+  type: EventSlotType;
+  level: LevelData | undefined;
+}
 
 interface CachedCatalog {
   total: number;
-  center: number;
+  page?: number;
   campaign: LevelData[];
   events: LevelData[];
 }
@@ -25,7 +33,7 @@ interface RemoteLevelRow {
 
 interface RemoteEventRow {
   id: string;
-  event_type: 'daily' | 'weekly' | 'monthly';
+  event_type: EventSlotType;
   period_key: string;
   piece_count: number;
   image_path: string;
@@ -56,11 +64,11 @@ function toEventLevel(row: RemoteEventRow): LevelData {
 
 export class LevelCatalog {
   private static instance: LevelCatalog | null = null;
-  private total = LEVELS.length;
-  private center = 1;
-  private campaign: LevelData[] = [...LEVELS];
-  private events: LevelData[] = [...SPECIAL_LEVELS];
-  private byId = new Map<string, LevelData>();
+  private total = 0;
+  private page = 1;
+  private campaign: LevelData[] = [];
+  private events: LevelData[] = [];
+  private known = new Map<string, LevelData>();
   private ready: Promise<void> | null = null;
 
   static getInstance(): LevelCatalog {
@@ -77,116 +85,125 @@ export class LevelCatalog {
     return this.total;
   }
 
-  getCenter(): number {
-    return this.center;
+  getPage(): number {
+    return this.page;
+  }
+
+  getPageBounds(): { start: number; end: number } {
+    return pageBounds(this.page, this.total);
   }
 
   getCampaignWindow(): LevelData[] {
-    const lastId = ProgressStore.getInstance().getLastPlayedLevelId();
-    const last = lastId && !lastId.startsWith('event_') ? this.byId.get(lastId) : undefined;
-    return mergeExtraLevel(this.campaign, last);
+    return this.campaign;
   }
 
   getEvents(): LevelData[] {
-    return this.events.length > 0 ? this.events : [...SPECIAL_LEVELS];
+    return this.events;
+  }
+
+  getEventSlots(): EventSlot[] {
+    const byType = new Map(
+      this.events.filter((row) => row.eventType).map((row) => [row.eventType, row] as const),
+    );
+    return EVENT_SLOT_TYPES.map((type) => ({ type, level: byType.get(type) }));
   }
 
   getById(id: string): LevelData | undefined {
-    return this.byId.get(id) ?? LEVELS.find((l) => l.id === id) ?? SPECIAL_LEVELS.find((l) => l.id === id);
+    return this.known.get(id);
   }
 
-  canShift(delta: number): boolean {
-    return shiftCenter(this.center, delta, this.total) !== this.center;
+  canShift(deltaPages: number): boolean {
+    return shiftPage(this.page, deltaPages, this.total) !== this.page;
   }
 
-  async shift(delta: number): Promise<void> {
-    const next = shiftCenter(this.center, delta, this.total);
-    if (next === this.center) return;
-    this.center = next;
-    await this.refreshWindow();
+  async shift(deltaPages: number): Promise<void> {
+    const next = shiftPage(this.page, deltaPages, this.total);
+    if (next === this.page) return;
+    await this.refreshWindow(next);
+    this.writeLocalCache();
   }
 
-  async focusOn(center: number): Promise<void> {
-    this.center = Math.min(Math.max(1, center), Math.max(1, this.total));
-    await this.refreshWindow();
+  async focusOn(index: number): Promise<void> {
+    await this.refreshWindow(pageForIndex(index, this.total));
   }
 
-  private rebuildIndex() {
-    this.byId.clear();
-    for (const row of [...LEVELS, ...SPECIAL_LEVELS, ...this.campaign, ...this.events]) {
-      this.byId.set(row.id, row);
-    }
+  private remember(rows: LevelData[]) {
+    for (const row of rows) this.known.set(row.id, row);
   }
 
   private async load() {
     this.readLocalCache();
-    this.center = defaultMapCenter();
+    this.page = pageForIndex(ProgressStore.getInstance().getHighestUnlockedIndex() + 1, this.total);
     if (isCloudConfigured()) {
       try {
-        await this.refreshWindow();
+        await this.refreshWindow(this.page);
         await this.refreshEvents();
         this.writeLocalCache();
       } catch {
-        if (this.campaign.length === 0) this.useBundled();
+        await this.retainVisible();
       }
     } else {
-      this.useBundled();
+      this.campaign = [];
+      this.events = [];
+      this.total = 0;
     }
-    this.rebuildIndex();
-    await this.cacheVisible();
   }
 
-  private useBundled() {
-    this.campaign = [...LEVELS];
-    this.events = [...SPECIAL_LEVELS];
-    this.total = LEVELS.length;
-    this.center = Math.min(Math.max(1, this.center), this.total);
-  }
-
-  private async refreshWindow() {
+  private async refreshWindow(page: number = this.page) {
     const supabase = getSupabase();
     if (!supabase) {
-      this.useBundled();
-      this.rebuildIndex();
+      this.campaign = [];
+      this.total = 0;
+      this.page = 1;
+      await this.retainVisible();
       return;
     }
+    const query = pageQuery(page, this.total > 0 ? this.total : MAP_PAGE_SIZE);
     const { data, error } = await supabase.rpc('get_level_window', {
-      p_around: this.center,
-      p_radius: MAP_WINDOW_RADIUS,
+      p_around: query.around,
+      p_radius: query.radius,
     });
     if (error || !data) throw error ?? new Error('no window');
     const payload = data as { total?: number; rows?: RemoteLevelRow[] };
-    this.total = typeof payload.total === 'number' && payload.total > 0 ? payload.total : LEVELS.length;
-    const rows = Array.isArray(payload.rows) ? payload.rows : [];
-    this.campaign = rows.length > 0 ? rows.map(toCampaignLevel) : [...LEVELS];
-    if (rows.length === 0) this.total = LEVELS.length;
-    this.rebuildIndex();
-    await this.cacheVisible();
+    this.total = typeof payload.total === 'number' && payload.total > 0 ? payload.total : 0;
+    this.page = shiftPage(page, 0, this.total);
+    const rows = Array.isArray(payload.rows) ? payload.rows.map(toCampaignLevel) : [];
+    this.campaign = this.total > 0 ? sliceByPage(rows, this.page, this.total, campaignIndexOf) : [];
+    this.remember(this.campaign);
+    await this.retainVisible();
   }
 
   private async refreshEvents() {
     const supabase = getSupabase();
-    if (!supabase) return;
+    if (!supabase) {
+      this.events = [];
+      return;
+    }
     const now = Date.now();
     const { data, error } = await supabase.rpc('get_current_events', {
       p_daily: utcDateKey(now),
       p_weekly: isoWeekKey(now),
       p_monthly: monthKey(now),
     });
-    if (error) return;
+    if (error) {
+      this.events = [];
+      return;
+    }
     const rows = (data as RemoteEventRow[] | null) ?? [];
-    this.events = rows.length > 0 ? rows.map(toEventLevel) : [...SPECIAL_LEVELS];
-    this.rebuildIndex();
+    this.events = rows.map(toEventLevel);
+    this.remember(this.events);
+    await this.retainVisible();
+    void Promise.all(
+      this.events.map((level) => ensureImage('thumb', level.id, level.thumbUrl ?? level.imageUrl)),
+    );
   }
 
-  private async cacheVisible() {
-    const visible = [...this.getCampaignWindow(), ...this.getEvents()];
-    const keep = new Set(visible.map((l) => l.id));
+  /** Keep thumbs/full for the visible page, current events, and last-played (even if off-page). */
+  private async retainVisible() {
+    const keep = new Set(this.campaign.map((level) => level.id));
+    for (const level of this.events) keep.add(level.id);
     const last = ProgressStore.getInstance().getLastPlayedLevelId();
     if (last) keep.add(last);
-    await Promise.all(
-      visible.map((level) => ensureImage('thumb', level.id, level.thumbUrl ?? level.imageUrl)),
-    );
     await retainImages(keep);
   }
 
@@ -195,10 +212,16 @@ export class LevelCatalog {
       const raw = localStorage.getItem(CATALOG_CACHE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as CachedCatalog;
-      if (Array.isArray(parsed.campaign) && parsed.campaign.length > 0) this.campaign = parsed.campaign;
-      if (Array.isArray(parsed.events) && parsed.events.length > 0) this.events = parsed.events;
+      if (Array.isArray(parsed.campaign) && parsed.campaign.length > 0) {
+        this.campaign = parsed.campaign;
+        this.remember(parsed.campaign);
+      }
+      if (Array.isArray(parsed.events)) {
+        this.events = parsed.events;
+        this.remember(parsed.events);
+      }
       if (typeof parsed.total === 'number') this.total = parsed.total;
-      if (typeof parsed.center === 'number') this.center = parsed.center;
+      if (typeof parsed.page === 'number') this.page = parsed.page;
     } catch {
       // ignore corrupt cache
     }
@@ -208,7 +231,7 @@ export class LevelCatalog {
     try {
       const payload: CachedCatalog = {
         total: this.total,
-        center: this.center,
+        page: this.page,
         campaign: this.campaign,
         events: this.events,
       };
@@ -217,8 +240,4 @@ export class LevelCatalog {
       // quota
     }
   }
-}
-
-export function defaultMapCenter(): number {
-  return ProgressStore.getInstance().getHighestUnlockedIndex() + 1;
 }

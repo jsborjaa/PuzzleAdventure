@@ -121,7 +121,7 @@ export class ProgressStore {
       const parsed = JSON.parse(stored) as Record<string, SavedSession>;
       this.specialSessions = {};
       for (const [id, session] of Object.entries(parsed)) {
-        if (session?.version === 3) this.specialSessions[id] = session;
+        if (session?.version === 3 || session?.version === 4) this.specialSessions[id] = session;
       }
     } catch {
       this.specialSessions = {};
@@ -238,8 +238,8 @@ export class ProgressStore {
     return this.getPowerups();
   }
 
-  craftPowerup(from: PowerupKey): boolean {
-    const next = craft(this.powerups, from);
+  craftPowerup(to: PowerupKey): boolean {
+    const next = craft(this.powerups, to);
     if (!next) return false;
     this.powerups = next;
     this.savePowerups();
@@ -257,9 +257,14 @@ export class ProgressStore {
     return false;
   }
 
-  tryClaimCampaignFirstClear(didUnlock: boolean, rng?: () => number): PowerupPack | null {
+  tryClaimCampaignFirstClear(
+    didUnlock: boolean,
+    levelNum: number,
+    pieceCount: number,
+    rng?: () => number,
+  ): PowerupPack | null {
     if (!didUnlock) return null;
-    const pack = campaignFirstClearPack(rng);
+    const pack = campaignFirstClearPack(levelNum, pieceCount, rng);
     this.grantPack(pack);
     return { ...pack };
   }
@@ -285,7 +290,7 @@ export class ProgressStore {
     return Math.max(0, AD_COMMON_DAILY_CAP - this.claims.adsCount);
   }
 
-  /** DEV / later rewarded-ad: one random common, 5 per UTC day. */
+  /** After a rewarded ad (or DEV simulate): one random common, 5 per UTC day. */
   tryClaimAdCommon(nowMs: number = Date.now(), rng?: () => number): PowerupPack | null {
     const day = utcDateKey(nowMs);
     if (this.claims.adsDate !== day) {
@@ -360,6 +365,11 @@ export class ProgressStore {
     this.storage.removeItem(LEGACY_SESSION_KEY);
   }
 
+  /** Drop the campaign in-progress save only if it belongs to this level. */
+  clearCampaignSessionIf(levelId: string) {
+    if (this.getSession()?.levelId === levelId) this.clearSession();
+  }
+
   saveSpecialSession(session: SavedSession) {
     this.specialSessions[session.levelId] = session;
     this.saveSpecialSessions();
@@ -376,6 +386,9 @@ export class ProgressStore {
 
   recordClear(levelId: string, elapsedMs: number): { bestMs: number; lastMs: number; isRecord: boolean } {
     const prev = this.times[levelId];
+    if (elapsedMs <= 0 && prev) {
+      return { bestMs: prev.bestMs, lastMs: elapsedMs, isRecord: false };
+    }
     const isRecord = !prev || elapsedMs < prev.bestMs;
     const next: LevelTime = {
       bestMs: prev ? Math.min(prev.bestMs, elapsedMs) : elapsedMs,
@@ -405,7 +418,7 @@ export class ProgressStore {
     if (!raw) return null;
     try {
       const parsed = JSON.parse(raw) as SavedSession;
-      if (parsed?.version !== 3 || !Array.isArray(parsed.pieces)) return null;
+      if ((parsed?.version !== 3 && parsed?.version !== 4) || !Array.isArray(parsed.pieces)) return null;
       return parsed;
     } catch {
       return null;

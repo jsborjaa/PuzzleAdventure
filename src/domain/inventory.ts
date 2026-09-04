@@ -1,5 +1,5 @@
 import { DEFAULT_POWERUPS, type PowerupKey } from './product';
-import { getPowerupDef } from './powerups';
+import { getCraftRecipe } from './powerups';
 
 export type PowerupCounts = Record<PowerupKey, number>;
 
@@ -40,11 +40,22 @@ export function applyPack(counts: PowerupCounts, pack: Partial<PowerupCounts>): 
   return next;
 }
 
-/** Craft using the catalog (4 Area → sArea, 10×20s → infinite). */
-export function craft(counts: PowerupCounts, from: PowerupKey): PowerupCounts | null {
-  const def = getPowerupDef(from);
-  if (!def?.craftsTo || !def.craftCost) return null;
-  return tryUpgrade(counts, from, def.craftsTo, def.craftCost);
+export function canCraft(counts: PowerupCounts, to: PowerupKey): boolean {
+  const recipe = getCraftRecipe(to);
+  if (!recipe) return false;
+  return (Object.keys(recipe.cost) as PowerupKey[]).every((key) => (counts[key] ?? 0) >= (recipe.cost[key] ?? 0));
+}
+
+/** Craft a rare from `CRAFT_RECIPES` (multi-ingredient). */
+export function craft(counts: PowerupCounts, to: PowerupKey): PowerupCounts | null {
+  const recipe = getCraftRecipe(to);
+  if (!recipe || !canCraft(counts, to)) return null;
+  const next = { ...counts };
+  for (const key of Object.keys(recipe.cost) as PowerupKey[]) {
+    next[key] = (next[key] ?? 0) - (recipe.cost[key] ?? 0);
+  }
+  next[recipe.to] = (next[recipe.to] ?? 0) + 1;
+  return next;
 }
 
 export function upgradeArea(counts: PowerupCounts): PowerupCounts | null {
@@ -52,5 +63,5 @@ export function upgradeArea(counts: PowerupCounts): PowerupCounts | null {
 }
 
 export function upgradeReveal(counts: PowerupCounts): PowerupCounts | null {
-  return craft(counts, 'reveal_temp');
+  return craft(counts, 'reveal_perm');
 }

@@ -11,6 +11,8 @@ export interface PieceState {
   correctY: number;
   angle: number;
   isSolved: boolean;
+  inTray: boolean;
+  trayIndex: number;
   logicalWidth: number;
   logicalHeight: number;
 }
@@ -28,10 +30,13 @@ export interface SavedPiece {
   y: number;
   angle: number;
   isSolved: boolean;
+  /** v4. Missing on v3 saves; unsolved pieces migrate into the tray. */
+  inTray?: boolean;
+  trayIndex?: number;
 }
 
 export interface SavedSession {
-  version: 3;
+  version: 3 | 4;
   levelId: string;
   pieces: SavedPiece[];
   revealPermanent: boolean;
@@ -42,8 +47,17 @@ export interface SavedSession {
 export type SessionEvent =
   | { type: 'pieceMoved'; id: PieceId; x: number; y: number }
   | { type: 'pieceRotated'; id: PieceId; angle: number }
+  | { type: 'pieceTrayChanged'; id: PieceId; inTray: boolean }
   | { type: 'piecePlaced'; id: PieceId }
-  | { type: 'won'; elapsedMs: number; bestMs: number; isRecord: boolean; rewards: PowerupPack | null }
+  | {
+      type: 'won';
+      elapsedMs: number;
+      bestMs: number;
+      isRecord: boolean;
+      rewards: PowerupPack | null;
+      allowWinDouble: boolean;
+      replayFarm: boolean;
+    }
   | { type: 'progress'; solved: number; total: number }
   | { type: 'inventoryChanged' }
   | { type: 'revealChanged' }

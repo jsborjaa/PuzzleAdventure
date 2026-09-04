@@ -17,12 +17,21 @@ export class AreaTool extends SelectionTool {
     if (!sel) return;
     const ids = this.session.useArea(sel.startCol, sel.startRow, this.gridSize);
     if (ids.length === 0) return;
+    this.lingerHighlight(550);
     AudioService.getInstance().playPop();
     for (const id of ids) {
       const state = this.session.getPiece(id);
       const sprite = this.board.getSprite(id);
       if (!state || !sprite) continue;
+      const fromTray = !sprite.visible;
+      sprite.setVisible(true);
+      sprite.setInteractive({ draggable: true, useHandCursor: true });
       sprite.setDepth(100);
+      if (fromTray) {
+        sprite.setPosition(state.x, state.y);
+        sprite.setDepth(1);
+        continue;
+      }
       this.scene.tweens.add({
         targets: sprite,
         x: state.x,

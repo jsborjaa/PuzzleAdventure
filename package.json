@@ -11,13 +11,17 @@
     "ingest": "tsx tools/ingest-levels.ts",
     "ingest:events": "tsx tools/ingest-events.ts",
     "cap:sync": "npm run build && node tools/obfuscate-android.mjs && npx cap sync",
-    "android": "npm run cap:sync && npx cap run android"
+    "android": "npm run cap:sync && npx cap run android",
+    "android:bundle": "npm run cap:sync && cd android && .\\gradlew bundleRelease"
   },
   "dependencies": {
+    "@capacitor-community/admob": "^6.2.0",
     "@capacitor/android": "^6.2.1",
+    "@capacitor/app": "^6.0.3",
     "@capacitor/core": "^6.2.1",
     "@capacitor/status-bar": "^6.0.2",
     "@supabase/supabase-js": "^2.114.0",
+    "capacitor-plugin-cdv-purchase": "^13.18.0",
     "phaser": "^3.80.0"
   },
   "devDependencies": {

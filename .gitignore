@@ -23,6 +23,11 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Android signing – never commit credentials
+android/keystore.properties
+*.jks
+*.keystore
+
 # Local photo drops for ingest (do not commit the JPEGs)
 content/**/*.jpg
 content/**/*.jpeg

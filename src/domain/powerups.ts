@@ -1,3 +1,4 @@
+import { campaignRankForPieces } from './campaignDifficulty';
 import type { PowerupKey } from './product';
 
 export type PowerupPack = Partial<Record<PowerupKey, number>>;
@@ -9,16 +10,28 @@ export interface PowerupDef {
   id: PowerupKey;
   tier: PowerupTier;
   family: PowerupFamily;
-  craftsTo?: PowerupKey;
-  craftCost?: number;
+}
+
+export interface CraftRecipe {
+  to: PowerupKey;
+  cost: PowerupPack;
 }
 
 export const POWERUP_DEFS: PowerupDef[] = [
   { id: 'hint', tier: 'common', family: 'place' },
-  { id: 'area', tier: 'common', family: 'gather', craftsTo: 'sarea', craftCost: 4 },
-  { id: 'reveal_temp', tier: 'common', family: 'reveal', craftsTo: 'reveal_perm', craftCost: 10 },
+  { id: 'lucky', tier: 'common', family: 'place' },
+  { id: 'reveal_temp', tier: 'common', family: 'reveal' },
+  { id: 'area', tier: 'rare', family: 'gather' },
   { id: 'sarea', tier: 'rare', family: 'gather' },
+  { id: 'solver', tier: 'rare', family: 'place' },
   { id: 'reveal_perm', tier: 'rare', family: 'reveal' },
+];
+
+export const CRAFT_RECIPES: CraftRecipe[] = [
+  { to: 'area', cost: { hint: 6, lucky: 3, reveal_temp: 1 } },
+  { to: 'sarea', cost: { hint: 10, lucky: 6, reveal_temp: 2 } },
+  { to: 'solver', cost: { hint: 9, lucky: 5 } },
+  { to: 'reveal_perm', cost: { reveal_temp: 10 } },
 ];
 
 export const COMMON_POWERUP_IDS: PowerupKey[] = POWERUP_DEFS.filter((d) => d.tier === 'common').map((d) => d.id);
@@ -27,17 +40,53 @@ export function getPowerupDef(id: PowerupKey): PowerupDef | undefined {
   return POWERUP_DEFS.find((d) => d.id === id);
 }
 
-export function campaignFirstClearPack(rng: () => number = Math.random): PowerupPack {
-  return { [randomCommonId(rng)]: 1 };
+export function getCraftRecipe(to: PowerupKey): CraftRecipe | undefined {
+  return CRAFT_RECIPES.find((r) => r.to === to);
 }
 
-export const GRANT_DAILY: PowerupPack = { hint: 2, area: 2, reveal_temp: 2 };
-export const GRANT_WEEKLY: PowerupPack = { hint: 2, area: 4, sarea: 1 };
+export const CAMPAIGN_CLEAR_BY_LEVEL: Record<number, PowerupPack> = {
+  1: { hint: 1 },
+  2: { lucky: 1 },
+  3: { reveal_temp: 1 },
+  4: { hint: 6, lucky: 3, reveal_temp: 1 },
+};
+
+export const CAMPAIGN_CLEAR_REWARDS: Record<'C' | 'B' | 'A' | 'S', { randomCommons: number }> = {
+  C: { randomCommons: 1 },
+  B: { randomCommons: 1 },
+  A: { randomCommons: 2 },
+  S: { randomCommons: 2 },
+};
+
+export function campaignFirstClearPack(
+  levelNum: number,
+  pieceCount: number,
+  rng: () => number = Math.random,
+): PowerupPack {
+  const scripted = CAMPAIGN_CLEAR_BY_LEVEL[levelNum];
+  if (scripted) return { ...scripted };
+  const rank = campaignRankForPieces(pieceCount);
+  const n = rank ? CAMPAIGN_CLEAR_REWARDS[rank].randomCommons : 1;
+  const pack: PowerupPack = {};
+  for (let i = 0; i < n; i++) {
+    const id = randomCommonId(rng);
+    pack[id] = (pack[id] ?? 0) + 1;
+  }
+  return pack;
+}
+
+export function allowCampaignWinDouble(levelNum: number): boolean {
+  return levelNum >= 5;
+}
+
+export const GRANT_DAILY: PowerupPack = { hint: 2, lucky: 2, reveal_temp: 2 };
+export const GRANT_WEEKLY: PowerupPack = { hint: 2, lucky: 4, sarea: 1 };
 export const GRANT_MONTHLY: PowerupPack = { hint: 3, reveal_temp: 5, sarea: 2, reveal_perm: 1 };
 
 export const AD_COMMON_DAILY_CAP = 5;
 
 export type StoreSkuId = 'ad_common' | 'pack_handy' | 'pack_rare';
+export type IapSkuId = 'pack_handy' | 'pack_rare';
 
 export interface StoreSku {
   id: StoreSkuId;
@@ -47,9 +96,21 @@ export interface StoreSku {
 
 export const STORE_SKUS: StoreSku[] = [
   { id: 'ad_common', kind: 'ad', pack: {} },
-  { id: 'pack_handy', kind: 'iap', pack: { hint: 10, area: 10, reveal_temp: 10 } },
-  { id: 'pack_rare', kind: 'iap', pack: { sarea: 3, reveal_perm: 2 } },
+  { id: 'pack_handy', kind: 'iap', pack: { hint: 10, lucky: 10, reveal_temp: 10 } },
+  { id: 'pack_rare', kind: 'iap', pack: { area: 2, sarea: 3, reveal_perm: 2, solver: 1 } },
 ];
+
+export const IAP_SKU_IDS: IapSkuId[] = STORE_SKUS.filter((s): s is StoreSku & { id: IapSkuId; kind: 'iap' } => s.kind === 'iap').map(
+  (s) => s.id,
+);
+
+export function isIapSkuId(id: string): id is IapSkuId {
+  return id === 'pack_handy' || id === 'pack_rare';
+}
+
+export function getIapSku(id: IapSkuId): StoreSku | undefined {
+  return STORE_SKUS.find((s) => s.id === id);
+}
 
 export function eventGrant(eventType: 'daily' | 'weekly' | 'monthly'): PowerupPack {
   if (eventType === 'daily') return GRANT_DAILY;

@@ -46,6 +46,7 @@ describe('i18n', () => {
     initI18n({ saved: 'en', languages: [] });
     setLocale('es');
     expect(t('hud.replay')).toBe('Desarmar y jugar');
+    expect(t('hud.back')).toBe('Atrás');
     setLocale('fr');
     expect(t('event.daily')).toBe('Quotidien');
   });

@@ -1,4 +1,4 @@
-/** Piece-count curve for campaign levels. Shared by the bundled catalog and ingest CLI. */
+/** Piece-count curve for campaign levels. Shared with ingest CLI. */
 
 class SeededRNG {
   private seed: number;
@@ -25,7 +25,7 @@ export function getDifficultyForLevel(levelNum: number): number {
 
   const groupIndex = Math.floor((levelNum - 11) / 10);
   const indexInGroup = (levelNum - 11) % 10;
-  const bag = [36, 36, 36, 36, 64, 64, 64, 64, 100, 100];
+  const bag = [36, 36, 36, 36, 64, 64, 64, 64, 128, 128];
   const rng = new SeededRNG(groupIndex + 12345);
   for (let i = bag.length - 1; i > 0; i--) {
     const j = Math.floor(rng.next() * (i + 1));
@@ -40,4 +40,13 @@ export const EVENT_PIECE_COUNTS = {
   monthly: 1000,
 } as const;
 
-export const BUNDLED_CAMPAIGN_COUNT = 14;
+export type CampaignRank = 'C' | 'B' | 'A' | 'S';
+
+export function campaignRankForPieces(n: number): CampaignRank | null {
+  if (n <= 16) return 'C';
+  if (n <= 36) return 'B';
+  if (n <= 64) return 'A';
+  if (n <= 128) return 'S';
+  return null;
+}
+

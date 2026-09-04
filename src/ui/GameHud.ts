@@ -1,11 +1,23 @@
 import { formatTimer } from '../domain/timer';
 import type { PowerupKey, ToolId } from '../domain/product';
-import { packEntries, packHasItems, type PowerupPack } from '../domain/powerups';
+import { canCraft } from '../domain/inventory';
+import {
+  getCraftRecipe,
+  getPowerupDef,
+  packEntries,
+  packHasItems,
+  POWERUP_DEFS,
+  randomCommonId,
+  type PowerupPack,
+} from '../domain/powerups';
 import { PuzzleSession } from '../domain/PuzzleSession';
-import { fetchLeaderboard, submitScore, type Leaderboard } from '../data/cloud/leaderboard';
+import { ensureAds } from '../data/ads';
+import { submitScore, type RankingResult } from '../data/cloud/leaderboard';
 import { t } from '../i18n';
-import { iconHtml, type IconName } from './icons';
-import { powerupName } from './powerupLabel';
+import { button, el, pagePoint, preventCanvasSteal, roundButton } from './dom';
+import { iconHtml } from './icons';
+import { formatPack, powerupName } from './powerupLabel';
+import { openRankingSheet } from './rankingSheet';
 
 export interface HudCallbacks {
   onExitToMenu: () => void;
@@ -15,18 +27,16 @@ export interface HudCallbacks {
 }
 
 export class GameHud {
-  private root: HTMLElement;
-  private bottom: HTMLDivElement;
-  private toolsRow: HTMLDivElement;
-  private mapRail: HTMLDivElement;
-  private mapTab: HTMLButtonElement;
-  private toolsTab: HTMLButtonElement;
+  private overlayHost: HTMLElement;
   private progressFill: HTMLDivElement;
   private timerLabel: HTMLDivElement;
   private bestLabel: HTMLDivElement;
   private revealCountdown: HTMLDivElement;
   private replayBtn: HTMLButtonElement | null = null;
+  private popover: HTMLElement | null = null;
+  private openTier: 'common' | 'rare' | null = null;
   private badges = new Map<PowerupKey, HTMLElement>();
+  private powerupBtns = new Map<PowerupKey, HTMLButtonElement>();
   private unsub: () => void;
   private revealLeft = 0;
   private revealInterval: number | null = null;
@@ -34,19 +44,31 @@ export class GameHud {
   private abort = new AbortController();
 
   constructor(
-    host: HTMLElement,
+    overlayHost: HTMLElement,
+    private chrome: HTMLElement,
+    private status: HTMLElement,
     private session: PuzzleSession,
     private callbacks: HudCallbacks,
   ) {
-    host.innerHTML = '';
-    this.root = host;
-    const top = el('div', 'hud-top');
-    const bottom = el('div', 'hud-bottom');
+    overlayHost.innerHTML = '';
+    this.overlayHost = overlayHost;
+    this.chrome.replaceChildren();
+    this.status.replaceChildren();
 
-    const mapTab = edgeTab('chevronRight', t('hud.showMap'), () => this.toggleMap());
-    const menu = roundButton('map', t('hud.map'), 'btn-coral', () => this.callbacks.onExitToMenu());
-    const mapRail = el('div', 'hud-map-rail');
-    mapRail.append(mapTab, menu);
+    const back = this.chromeItem('chevronLeft', t('hud.back'), 'btn-coral', () => this.callbacks.onExitToMenu());
+    const commons = this.chromeItem('commons', t('hud.commons'), 'btn-mint', () => this.togglePopover('common'));
+    const rares = this.chromeItem('rares', t('hud.rares'), 'btn-coral', () => this.togglePopover('rare'));
+    const eyeWrap = this.chromeItem('peek', t('hud.peek'), 'btn-mint');
+    const hold = (on: boolean) => (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.session.setEyeHold(on);
+    };
+    eyeWrap.btn.addEventListener('pointerdown', hold(true));
+    eyeWrap.btn.addEventListener('pointerup', hold(false));
+    eyeWrap.btn.addEventListener('pointerleave', hold(false));
+    eyeWrap.btn.addEventListener('pointercancel', hold(false));
+    this.chrome.append(back.wrap, commons.wrap, rares.wrap, eyeWrap.wrap);
 
     const progress = el('div', 'progress-bar-container');
     this.progressFill = el('div', 'progress-bar-fill');
@@ -55,55 +77,27 @@ export class GameHud {
     this.bestLabel = el('div', 'hud-best');
     this.revealCountdown = el('div', 'reveal-timer');
     this.revealCountdown.style.display = 'none';
-    const mid = el('div', 'hud-top-mid');
     const times = el('div', 'hud-times hud-glass');
     times.append(this.timerLabel, this.bestLabel, this.revealCountdown);
-    mid.append(progress, times);
+    this.status.append(progress, times);
 
-    const eye = roundButton('peek', t('hud.peek'), 'btn-mint');
-    const hold = (on: boolean) => (e: Event) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.session.setEyeHold(on);
-    };
-    eye.addEventListener('pointerdown', hold(true));
-    eye.addEventListener('pointerup', hold(false));
-    eye.addEventListener('pointerleave', hold(false));
-    eye.addEventListener('pointercancel', hold(false));
-    top.append(mapRail, mid, eye);
-
-    const tools = el('div', 'hud-tools');
-    const perm = this.powerup('reveal_perm', () => this.session.togglePermanentReveal());
-    const temp = this.powerup('reveal_temp', () => {
-      if (this.session.activateTemporaryReveal()) this.startRevealCountdown(20);
-    });
-    const area = this.toolButton('area');
-    const sarea = this.toolButton('sarea');
-    const hint = this.toolButton('hint');
-    tools.append(perm, temp, area, sarea, hint);
-
-    this.setupUpgrade(area, sarea, () => this.session.upgradeArea());
-    this.setupUpgrade(temp, perm, () => this.session.upgradeReveal());
-
-    const toolsTab = edgeTab('chevronLeft', t('hud.showTools'), () => this.toggleTools());
-    bottom.append(toolsTab, tools);
-
-    this.mapRail = mapRail;
-    this.mapTab = mapTab;
-    this.toolsTab = toolsTab;
-    this.toolsRow = tools;
-    this.bottom = bottom;
-    if (this.session.mode === 'replay' || this.session.hasWon) {
-      this.ensureReplayButton();
-      this.setToolsOpen(true);
+    for (const def of POWERUP_DEFS) {
+      this.powerupBtns.set(def.id, this.toolButton(def.id));
     }
 
-    host.append(top, bottom);
-    preventCanvasSteal(host, this.abort.signal);
+    if (this.session.mode === 'replay' || this.session.hasWon) {
+      this.ensureReplayButton();
+    }
+
+    preventCanvasSteal(this.chrome, this.abort.signal);
+    preventCanvasSteal(this.status, this.abort.signal);
 
     this.unsub = this.session.on((event) => {
       if (event.type === 'progress' || event.type === 'piecePlaced') this.syncProgress();
-      if (event.type === 'inventoryChanged') this.syncInventory();
+      if (event.type === 'inventoryChanged') {
+        this.syncInventory();
+        this.syncCraftButtons();
+      }
       if (event.type === 'timer') this.timerLabel.textContent = formatTimer(event.elapsedMs);
       if (event.type === 'revealChanged') {
         const r = this.session.getReveal();
@@ -112,7 +106,7 @@ export class GameHud {
       }
       if (event.type === 'won') {
         this.ensureReplayButton();
-        this.setToolsOpen(true);
+        this.closePopover();
         this.showWin(event);
       }
     });
@@ -124,27 +118,102 @@ export class GameHud {
     if (this.session.qualityGate) {
       this.toast(t('hud.quality', { n: this.session.qualityGate.to }));
     }
+
+    window.addEventListener('pointerdown', this.onDocPointer, { signal: this.abort.signal });
   }
 
   destroy() {
     this.abort.abort();
     this.unsub();
     this.stopRevealCountdown();
-    this.root.innerHTML = '';
+    this.closePopover();
+    this.chrome.replaceChildren();
+    this.status.replaceChildren();
+    this.overlayHost.innerHTML = '';
   }
 
-  private powerup(key: PowerupKey, onClick: () => void) {
-    const btn = this.badgeButton(key);
-    btn.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onClick();
-    });
-    return btn;
+  private onDocPointer = (ev: PointerEvent) => {
+    if (!this.popover) return;
+    const node = ev.target as Node | null;
+    if (this.popover.contains(node) || this.chrome.contains(node)) return;
+    this.closePopover();
+  };
+
+  private togglePopover(tier: 'common' | 'rare') {
+    if (this.openTier === tier) {
+      this.closePopover();
+      return;
+    }
+    this.closePopover();
+    const pop = el('div', 'hud-popover');
+    pop.setAttribute('role', 'menu');
+    const ids = POWERUP_DEFS.filter((d) => d.tier === tier).map((d) => d.id);
+    for (const id of ids) {
+      const btn = this.powerupBtns.get(id);
+      if (!btn) continue;
+      const recipe = getCraftRecipe(id);
+      if (tier === 'rare' && recipe) {
+        const row = el('div', 'hud-popover-row');
+        row.appendChild(btn);
+        const craftBtn = el('button', 'btn hud-craft');
+        craftBtn.type = 'button';
+        craftBtn.dataset.craft = id;
+        const label = el('span', 'hud-craft-label');
+        label.textContent = t('hud.craft');
+        const cost = el('span', 'hud-craft-cost');
+        cost.textContent = formatPack(recipe.cost);
+        craftBtn.append(label, cost);
+        craftBtn.title = `${t('hud.craft')}: ${formatPack(recipe.cost)}`;
+        craftBtn.setAttribute('aria-label', `${t('hud.craft')}: ${formatPack(recipe.cost)}`);
+        craftBtn.disabled = !canCraft(this.session.getInventory(), id);
+        craftBtn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        craftBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.session.craft(id);
+          this.syncCraftButtons();
+        });
+        row.appendChild(craftBtn);
+        pop.appendChild(row);
+      } else {
+        pop.appendChild(btn);
+      }
+    }
+    this.chrome.appendChild(pop);
+    this.popover = pop;
+    this.openTier = tier;
+  }
+
+  handleBack(): boolean {
+    if (!this.popover) return false;
+    this.closePopover();
+    return true;
+  }
+
+  closePopover() {
+    if (!this.popover) {
+      this.openTier = null;
+      return;
+    }
+    this.popover.remove();
+    this.popover = null;
+    this.openTier = null;
+  }
+
+  private chromeItem(icon: Parameters<typeof roundButton>[0], label: string, tone: string, onClick?: () => void) {
+    const wrap = el('div', 'hud-chrome-item');
+    const btn = roundButton(icon, label, tone, onClick);
+    const cap = el('span', 'hud-chrome-caption');
+    cap.textContent = label;
+    wrap.append(btn, cap);
+    return { wrap, btn };
   }
 
   private toolButton(tool: ToolId) {
-    const key: PowerupKey = tool === 'sarea' ? 'sarea' : tool === 'area' ? 'area' : 'hint';
+    const key: PowerupKey = tool;
     const btn = this.badgeButton(key);
     const start = (e: Event) => {
       e.preventDefault();
@@ -159,7 +228,7 @@ export class GameHud {
         btn.classList.remove('active');
         const page = pagePoint(ev);
         this.callbacks.onDeactivateTool(page.x, page.y);
-        this.setToolsOpen(false);
+        this.closePopover();
         window.removeEventListener('pointerup', stop);
         window.removeEventListener('pointercancel', stop);
         window.removeEventListener('touchend', stop);
@@ -174,7 +243,7 @@ export class GameHud {
 
   private badgeButton(key: PowerupKey) {
     const label = powerupName(key);
-    const tone = key === 'sarea' ? 'btn-coral' : 'btn-mint';
+    const tone = getPowerupDef(key)?.tier === 'rare' ? 'btn-coral' : 'btn-mint';
     const btn = roundButton(key, label, tone);
     const badge = el('span', 'hud-badge');
     btn.appendChild(badge);
@@ -182,18 +251,12 @@ export class GameHud {
     return btn;
   }
 
-  private setupUpgrade(source: HTMLElement, target: HTMLElement, apply: () => boolean) {
-    let startX = 0;
-    let startY = 0;
-    source.addEventListener('pointerdown', (ev) => {
-      startX = ev.clientX;
-      startY = ev.clientY;
-    });
-    source.addEventListener('pointerup', (ev) => {
-      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 8) return;
-      const rect = target.getBoundingClientRect();
-      if (ev.clientX < rect.left || ev.clientX > rect.right || ev.clientY < rect.top || ev.clientY > rect.bottom) return;
-      apply();
+  private syncCraftButtons() {
+    if (!this.popover) return;
+    const counts = this.session.getInventory();
+    this.popover.querySelectorAll<HTMLButtonElement>('[data-craft]').forEach((btn) => {
+      const id = btn.dataset.craft as PowerupKey;
+      btn.disabled = !canCraft(counts, id);
     });
   }
 
@@ -234,36 +297,10 @@ export class GameHud {
     this.revealCountdown.style.display = 'none';
   }
 
-  private toggleMap() {
-    this.setMapOpen(!this.mapRail.classList.contains('is-open'));
-  }
-
-  private toggleTools() {
-    this.setToolsOpen(!this.bottom.classList.contains('is-open'));
-  }
-
-  private setMapOpen(open: boolean) {
-    this.mapRail.classList.toggle('is-open', open);
-    this.mapTab.innerHTML = iconHtml(open ? 'chevronLeft' : 'chevronRight');
-    const label = open ? t('hud.hideMap') : t('hud.showMap');
-    this.mapTab.title = label;
-    this.mapTab.setAttribute('aria-label', label);
-    this.mapTab.setAttribute('aria-expanded', open ? 'true' : 'false');
-  }
-
-  private setToolsOpen(open: boolean) {
-    this.bottom.classList.toggle('is-open', open);
-    this.toolsTab.innerHTML = iconHtml(open ? 'chevronRight' : 'chevronLeft');
-    const label = open ? t('hud.hideTools') : t('hud.showTools');
-    this.toolsTab.title = label;
-    this.toolsTab.setAttribute('aria-label', label);
-    this.toolsTab.setAttribute('aria-expanded', open ? 'true' : 'false');
-  }
-
   private ensureReplayButton() {
     if (this.replayBtn) return;
     this.replayBtn = roundButton('replay', t('hud.replay'), 'btn-coral', () => this.callbacks.onReplay());
-    this.toolsRow.prepend(this.replayBtn);
+    this.chrome.appendChild(this.replayBtn);
   }
 
   private syncBest() {
@@ -282,6 +319,8 @@ export class GameHud {
     bestMs: number;
     isRecord: boolean;
     rewards: PowerupPack | null;
+    allowWinDouble: boolean;
+    replayFarm: boolean;
   }) {
     this.syncBest();
     if (this.overlay) return;
@@ -304,16 +343,16 @@ export class GameHud {
     cup.title = t('rank.open');
     cup.setAttribute('aria-label', t('rank.open'));
     card.appendChild(cup);
+    const rewardsRow = el('div', 'hud-reward-row');
     if (packHasItems(event.rewards)) {
       const rewardsTitle = el('p', 'hud-rewards-title');
       rewardsTitle.textContent = t('hud.rewardsTitle');
-      const row = el('div', 'hud-reward-row');
       for (const item of packEntries(event.rewards!)) {
         const chip = el('span', 'hud-chip');
         chip.textContent = t('hud.rewardItem', { name: powerupName(item.id), n: item.n });
-        row.appendChild(chip);
+        rewardsRow.appendChild(chip);
       }
-      card.append(rewardsTitle, row);
+      card.append(rewardsTitle, rewardsRow);
     }
     const actions = el('div', 'hud-card-actions');
     const replay = button(t('hud.replay'), 'btn', () => this.callbacks.onReplay());
@@ -321,148 +360,84 @@ export class GameHud {
     actions.append(replay, menu);
     card.append(actions);
     this.overlay.appendChild(card);
-    this.root.appendChild(this.overlay);
-    void this.loadBoard(event.isRecord, event.elapsedMs).then((board) => {
-      this.fillCup(cup, board);
+    this.overlayHost.appendChild(this.overlay);
+    this.mountWinAd(card, actions, rewardsRow, event);
+    void this.loadBoard(event.bestMs).then((result) => {
+      this.fillCup(cup, result);
     });
   }
 
-  private async loadBoard(isRecord: boolean, elapsedMs: number): Promise<Leaderboard | null> {
-    if (isRecord) return submitScore(this.session.levelId, elapsedMs);
-    return fetchLeaderboard(this.session.levelId);
+  private mountWinAd(
+    card: HTMLElement,
+    actions: HTMLElement,
+    rewardsRow: HTMLElement,
+    event: { rewards: PowerupPack | null; allowWinDouble: boolean; replayFarm: boolean },
+  ) {
+    const wantsDouble = event.allowWinDouble && packHasItems(event.rewards);
+    const wantsFarm = event.replayFarm;
+    if (!wantsDouble && !wantsFarm) return;
+    void ensureAds().then((ads) => {
+      if (!ads.available || !this.overlay) return;
+      const label = ads.simulated
+        ? t('store.adSimulate')
+        : wantsDouble
+          ? t('hud.winDouble')
+          : t('hud.winFarm');
+      let used = false;
+      const adBtn = button(label, 'btn btn-coral', () => {
+        void (async () => {
+          if (used) return;
+          if (ads.simulated && !confirm(t('store.adSimulateConfirm'))) return;
+          adBtn.disabled = true;
+          const result = await ads.watchRewarded();
+          if (result.status !== 'rewarded') {
+            adBtn.disabled = false;
+            return;
+          }
+          used = true;
+          const pack: PowerupPack = wantsDouble && event.rewards ? { ...event.rewards } : { [randomCommonId()]: 1 };
+          this.session.grantWinPack(pack);
+          if (!rewardsRow.parentElement) {
+            const rewardsTitle = el('p', 'hud-rewards-title');
+            rewardsTitle.textContent = t('hud.rewardsTitle');
+            card.insertBefore(rewardsTitle, actions);
+            card.insertBefore(rewardsRow, actions);
+          }
+          for (const item of packEntries(pack)) {
+            const chip = el('span', 'hud-chip');
+            chip.textContent = t('hud.rewardItem', { name: powerupName(item.id), n: item.n });
+            rewardsRow.appendChild(chip);
+          }
+          adBtn.remove();
+        })();
+      });
+      actions.prepend(adBtn);
+    });
   }
 
-  private fillCup(cup: HTMLButtonElement, board: Leaderboard | null) {
+  private async loadBoard(bestMs: number): Promise<RankingResult> {
+    return submitScore(this.session.levelId, bestMs);
+  }
+
+  private fillCup(cup: HTMLButtonElement, result: RankingResult) {
     cup.disabled = false;
     cup.classList.remove('is-loading');
-    if (!board) {
-      cup.classList.add('is-offline');
-      const label = el('span', 'hud-cup-rank');
-      label.textContent = t('rank.offline');
-      cup.appendChild(label);
-      cup.onclick = () => this.toast(t('rank.offline'));
-      return;
-    }
-    const rank = board.my_rank;
+    const rank = result.board?.my_rank;
     const label = el('span', 'hud-cup-rank');
-    label.textContent = rank ? t('rank.position', { n: rank }) : t('rank.open');
-    cup.appendChild(label);
-    cup.onclick = () => this.openLeaderboard(board);
-  }
-
-  private openLeaderboard(board: Leaderboard) {
-    const overlay = el('div', 'hud-overlay hud-board-overlay');
-    const sheet = el('div', 'hud-card hud-board');
-    const title = el('h2');
-    title.textContent = t('rank.title');
-    sheet.appendChild(title);
-    if (board.top.length === 0) {
-      const empty = el('p', 'hud-board-empty');
-      empty.textContent = t('rank.empty');
-      sheet.appendChild(empty);
+    if (!result.board && result.error) {
+      cup.classList.add('is-offline');
+      label.textContent = t('rank.offline');
     } else {
-      const list = el('ol', 'hud-board-list');
-      for (const row of board.top) {
-        const li = el('li');
-        if (board.my_rank === row.rank) li.classList.add('is-you');
-        li.innerHTML = `<span class="hud-board-rank">#${row.rank}</span><span class="hud-board-name">${escapeHtml(row.nickname)}</span><span class="hud-board-time">${formatTimer(row.best_ms)}</span>`;
-        list.appendChild(li);
-      }
-      sheet.appendChild(list);
+      label.textContent = rank ? t('rank.position', { n: rank }) : t('rank.open');
     }
-    if (board.my_rank !== null && board.my_rank > 10 && board.my_ms !== null) {
-      const you = el('p', 'hud-board-you');
-      you.textContent = t('rank.you', {
-        n: board.my_rank,
-        name: board.my_nickname ?? t('rank.youFallback'),
-        time: formatTimer(board.my_ms),
-      });
-      sheet.appendChild(you);
-    }
-    const close = button(t('menu.close'), 'btn btn-mint', () => overlay.remove());
-    sheet.appendChild(close);
-    overlay.appendChild(sheet);
-    overlay.addEventListener('click', (ev) => {
-      if (ev.target === overlay) overlay.remove();
-    });
-    this.root.appendChild(overlay);
+    cup.appendChild(label);
+    cup.onclick = () => openRankingSheet(this.overlayHost, result.board, result.error);
   }
 
   private toast(text: string) {
     const n = el('div', 'hud-toast');
     n.textContent = text;
-    this.root.appendChild(n);
+    this.overlayHost.appendChild(n);
     window.setTimeout(() => n.remove(), 4000);
   }
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (ch) => {
-    if (ch === '&') return '&amp;';
-    if (ch === '<') return '&lt;';
-    if (ch === '>') return '&gt;';
-    if (ch === '"') return '&quot;';
-    return '&#39;';
-  });
-}
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  return node;
-}
-
-function tap(btn: HTMLButtonElement, onClick: () => void) {
-  btn.addEventListener(
-    'pointerdown',
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onClick();
-    },
-    { passive: false },
-  );
-}
-
-function button(label: string, className: string, onClick?: () => void) {
-  const btn = el('button', className);
-  btn.type = 'button';
-  btn.textContent = label;
-  if (onClick) tap(btn, onClick);
-  return btn;
-}
-
-function edgeTab(icon: IconName, label: string, onClick: () => void) {
-  const btn = el('button', 'hud-edge-tab');
-  btn.type = 'button';
-  btn.innerHTML = iconHtml(icon);
-  btn.title = label;
-  btn.setAttribute('aria-label', label);
-  btn.setAttribute('aria-expanded', 'false');
-  tap(btn, onClick);
-  return btn;
-}
-
-function roundButton(icon: IconName, label: string, tone: string, onClick?: () => void) {
-  const btn = el('button', `btn ${tone} hud-round`);
-  btn.type = 'button';
-  btn.innerHTML = iconHtml(icon);
-  btn.title = label;
-  btn.setAttribute('aria-label', label);
-  if (onClick) tap(btn, onClick);
-  return btn;
-}
-
-function pagePoint(ev: Event): { x: number; y: number } {
-  const pt = ev as PointerEvent;
-  if (typeof pt.pageX === 'number') return { x: pt.pageX, y: pt.pageY };
-  const touch = (ev as TouchEvent).changedTouches?.[0];
-  return { x: touch?.pageX ?? 0, y: touch?.pageY ?? 0 };
-}
-
-function preventCanvasSteal(root: HTMLElement, signal: AbortSignal) {
-  const stop = (e: Event) => e.stopPropagation();
-  root.addEventListener('mousedown', stop, { signal });
-  root.addEventListener('touchstart', stop, { passive: true, signal });
-  root.addEventListener('pointerdown', stop, { signal });
 }

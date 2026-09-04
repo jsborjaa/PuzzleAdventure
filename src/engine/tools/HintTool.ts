@@ -27,6 +27,11 @@ export class HintTool extends SelectionTool {
     const state = this.session.getPiece(id);
     if (!sprite || !state) return;
     AudioService.getInstance().playSnap();
+    if (state.inTray) {
+      const world = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
+      this.session.movePiece(id, world.x, world.y);
+    }
+    sprite.setVisible(true);
     sprite.setDepth(1000);
     sprite.disableInteractive();
     this.scene.tweens.add({

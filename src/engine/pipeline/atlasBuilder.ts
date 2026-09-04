@@ -18,8 +18,11 @@ export interface BuiltAtlas {
   frames: AtlasFrame[];
 }
 
+/** Extra pixels between packed frames so piece strokes and linear filtering do not bleed. */
+const FRAME_GAP = 4;
+
 export function atlasCacheKey(layout: JigsawLayout, imageKey: string, imageFingerprint: string): string {
-  return `${layout.levelId}:${layout.cols}x${layout.rows}:${layout.seed}:${imageKey}:${imageFingerprint}`;
+  return `${layout.levelId}:${layout.cols}x${layout.rows}:${layout.seed}:${imageKey}:${imageFingerprint}:v3`;
 }
 
 /** Cheap pixel signature so replacing a photo invalidates the cached atlas. */
@@ -127,16 +130,16 @@ function packFrames(
     }
     if (x + item.w > maxSize) {
       x = 0;
-      y += rowH;
+      y += rowH + FRAME_GAP;
       rowH = 0;
     }
     if (y + item.h > maxSize) {
       flushAtlas();
     }
     frames.push({ id: item.id, atlasIndex, x, y, w: item.w, h: item.h });
-    x += item.w;
+    x += item.w + FRAME_GAP;
     rowH = Math.max(rowH, item.h);
-    usedW = Math.max(usedW, x);
+    usedW = Math.max(usedW, x - FRAME_GAP);
     usedH = Math.max(usedH, y + rowH);
   }
   atlasSizes.push({ w: Math.max(1, usedW), h: Math.max(1, usedH) });

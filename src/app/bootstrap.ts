@@ -1,8 +1,10 @@
 import { GameConfig } from './GameConfig';
+import { initBackButton } from './backButton';
 import { getPreviewSize, mountDevicePreview, onPreviewChange } from '../ui/devicePreview';
 
 export function boot() {
   void applyNativeChrome();
+  void initBackButton();
   mountDevicePreview();
   const game = new Phaser.Game(GameConfig);
 
@@ -18,14 +20,32 @@ export function boot() {
     return { w, h };
   };
 
+  const getPhaserSize = (app: HTMLElement | null, view: { w: number; h: number }) => {
+    if (!app?.classList.contains('play-active')) return view;
+    const gc = document.getElementById('game-container');
+    if (!gc) return view;
+    const r = gc.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return view;
+    return { w: Math.round(r.width), h: Math.round(r.height) };
+  };
+
   const doResize = () => {
-    const { w, h } = getViewportSize();
+    const view = getViewportSize();
+    if (view.w < 2 || view.h < 2) return;
     const app = document.getElementById('app');
     if (app) {
-      app.style.width = `${w}px`;
-      app.style.height = `${h}px`;
+      app.style.width = `${view.w}px`;
+      app.style.height = `${view.h}px`;
+      if (app.classList.contains('play-active')) {
+        app.classList.toggle('is-landscape', view.w > view.h);
+        app.classList.toggle('is-portrait', view.w <= view.h);
+      }
     }
+    const { w, h } = getPhaserSize(app, view);
     game.scale.resize(w, h);
+    for (const scene of game.scene.getScenes(true)) {
+      scene.cameras.main.setSize(w, h);
+    }
   };
 
   const scheduleResize = () => {
@@ -42,7 +62,15 @@ export function boot() {
   };
 
   window.addEventListener('resize', scheduleResize, { passive: true });
-  window.addEventListener('orientationchange', scheduleResize, { passive: true });
+  window.addEventListener(
+    'orientationchange',
+    () => {
+      scheduleResize();
+      window.setTimeout(scheduleResize, 200);
+      window.setTimeout(scheduleResize, 450);
+    },
+    { passive: true },
+  );
   window.visualViewport?.addEventListener('resize', scheduleResize, { passive: true });
   if (import.meta.env.DEV) {
     mountDevicePreview();

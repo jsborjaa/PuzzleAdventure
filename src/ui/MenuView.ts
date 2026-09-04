@@ -1,22 +1,29 @@
 import { getLevelTitle, withDevCacheBust, type LevelData } from '../data/Levels';
-import { LevelCatalog } from '../data/LevelCatalog';
+import { LevelCatalog, type EventSlotType } from '../data/LevelCatalog';
 import { ProgressStore } from '../data/ProgressStore';
 import { syncNickname } from '../data/cloud/auth';
 import { ensureImage } from '../data/imageCache';
-import { getPowerupDef, POWERUP_DEFS, STORE_SKUS, AD_COMMON_DAILY_CAP, packHasItems } from '../domain/powerups';
-import { SIMULATE_IAP, type PowerupKey } from '../domain/product';
+import { canCraft } from '../domain/inventory';
+import { CRAFT_RECIPES, getIapSku, POWERUP_DEFS, STORE_SKUS, AD_COMMON_DAILY_CAP, packHasItems, type IapSkuId, type StoreSku } from '../domain/powerups';
+import { ensureBilling, getBilling, type BillingPort, type CatalogProduct } from '../data/billing';
+import { ensureAds, type AdsPort } from '../data/ads';
+import { submitScore } from '../data/cloud/leaderboard';
+import { boardShape } from '../domain/boardShape';
 import { formatTimer } from '../domain/timer';
 import { getLocale, isLocaleId, setLocale, SUPPORTED_LOCALES, t, type LocaleId } from '../i18n';
 import { iconHtml, type IconName } from './icons';
 import { formatPack, powerupName } from './powerupLabel';
+import { openRankingSheet } from './rankingSheet';
 
 type HubTab = 'map' | 'events' | 'store' | 'workshop';
 
 export class MenuView {
   private root: HTMLElement;
   private body: HTMLDivElement;
-  private chips: HTMLDivElement;
   private tab: HubTab = 'map';
+  private mapTurning = false;
+  private billing: BillingPort | null = null;
+  private ads: AdsPort | null = null;
 
   constructor(
     private host: HTMLElement,
@@ -27,9 +34,8 @@ export class MenuView {
     const top = el('header', 'hub-top');
     const logo = el('div', 'hub-logo');
     logo.innerHTML = `<span class="brand-top">${t('menu.brandPuzzle')}</span><span class="brand-bottom">${t('menu.brandAdventure')}</span>`;
-    this.chips = el('div', 'hub-chips');
     const gear = iconButton('gear', 'hub-gear btn btn-mint', t('menu.settings'), () => this.openSettings());
-    top.append(logo, this.chips, gear);
+    top.append(logo, gear);
 
     this.body = el('div', 'hub-body');
     const dock = el('nav', 'hub-dock');
@@ -42,8 +48,30 @@ export class MenuView {
 
     this.root.append(top, this.body, dock);
     host.appendChild(this.root);
-    this.syncChips();
     this.renderPane();
+  }
+
+  private async turnPage(delta: number) {
+    if (this.mapTurning) return;
+    const catalog = LevelCatalog.getInstance();
+    if (!catalog.canShift(delta)) return;
+    this.mapTurning = true;
+    const grid = this.body.querySelector('.menu-grid');
+    if (grid) {
+      grid.classList.add('is-paging');
+      const mask = el('div', 'map-paging-mask');
+      mask.textContent = t('menu.mapLoading');
+      grid.appendChild(mask);
+    }
+    this.body.querySelectorAll<HTMLButtonElement>('.hub-slice').forEach((btn) => {
+      btn.disabled = true;
+    });
+    try {
+      await catalog.shift(delta);
+    } finally {
+      this.mapTurning = false;
+      this.renderPane();
+    }
   }
 
   destroy() {
@@ -67,21 +95,6 @@ export class MenuView {
     this.renderPane();
   }
 
-  private syncChips() {
-    const counts = ProgressStore.getInstance().getPowerups();
-    this.chips.innerHTML = '';
-    const keys: PowerupKey[] = ['hint', 'area', 'reveal_temp'];
-    for (const key of keys) {
-      const chip = el('button', 'hub-chip');
-      chip.type = 'button';
-      chip.innerHTML = `${iconHtml(key)}<span>${counts[key] ?? 0}</span>`;
-      chip.title = powerupName(key);
-      chip.setAttribute('aria-label', powerupName(key));
-      chip.onclick = () => this.setTab('store');
-      this.chips.appendChild(chip);
-    }
-  }
-
   private renderPane() {
     this.body.innerHTML = '';
     if (this.tab === 'map') this.body.appendChild(this.mapPane());
@@ -96,23 +109,31 @@ export class MenuView {
     const title = el('h2', 'hub-pane-title');
     title.textContent = t('menu.subtitle');
     const pos = el('p', 'hub-pane-sub');
-    pos.textContent = t('menu.mapPosition', { n: catalog.getCenter(), total: catalog.getTotal() });
+    const range = catalog.getPageBounds();
+    pos.textContent =
+      catalog.getTotal() <= 0
+        ? t('menu.mapEmpty')
+        : t('menu.mapPosition', {
+            from: range.start,
+            to: range.end,
+            total: catalog.getTotal(),
+          });
     const nav = el('div', 'hub-map-nav');
     const prev = el('button', 'btn btn-ghost hub-slice');
     prev.type = 'button';
     prev.textContent = '‹';
     prev.title = t('menu.prevSlice');
-    prev.disabled = !catalog.canShift(-20);
+    prev.disabled = this.mapTurning || !catalog.canShift(-1);
     prev.onclick = () => {
-      void catalog.shift(-20).then(() => this.renderPane());
+      void this.turnPage(-1);
     };
     const next = el('button', 'btn btn-ghost hub-slice');
     next.type = 'button';
     next.textContent = '›';
     next.title = t('menu.nextSlice');
-    next.disabled = !catalog.canShift(20);
+    next.disabled = this.mapTurning || !catalog.canShift(1);
     next.onclick = () => {
-      void catalog.shift(20).then(() => this.renderPane());
+      void this.turnPage(1);
     };
     nav.append(prev, pos, next);
 
@@ -138,9 +159,13 @@ export class MenuView {
     title.textContent = t('menu.events');
     const islands = el('div', 'event-islands');
     const store = ProgressStore.getInstance();
-    LevelCatalog.getInstance()
-      .getEvents()
-      .forEach((level) => islands.appendChild(this.eventIsland(level, store.getBestMs(level.id))));
+    for (const slot of LevelCatalog.getInstance().getEventSlots()) {
+      islands.appendChild(
+        slot.level
+          ? this.eventIsland(slot.level, store.getBestMs(slot.level.id))
+          : this.emptyEventIsland(slot.type),
+      );
+    }
     wrap.append(title, islands);
     return wrap;
   }
@@ -163,34 +188,33 @@ export class MenuView {
         li.textContent = t('hud.rewardItem', { name: powerupName(def.id), n: counts[def.id] ?? 0 });
         stock.appendChild(li);
       }
-      this.syncChips();
     };
     fillStock();
-    const areaCost = getPowerupDef('area')?.craftCost ?? 4;
-    const revealCost = getPowerupDef('reveal_temp')?.craftCost ?? 10;
-    const craftArea = el('button', 'btn btn-coral');
-    craftArea.type = 'button';
-    craftArea.textContent = t('workshop.craftArea', { n: areaCost });
-    const craftReveal = el('button', 'btn btn-mint');
-    craftReveal.type = 'button';
-    craftReveal.textContent = t('workshop.craftReveal', { n: revealCost });
+    const craftBtns: HTMLButtonElement[] = [];
+    for (const recipe of CRAFT_RECIPES) {
+      const craftBtn = el('button', recipe.to === 'reveal_perm' ? 'btn btn-mint' : 'btn btn-coral');
+      craftBtn.type = 'button';
+      craftBtn.textContent = t('workshop.craftTo', {
+        cost: formatPack(recipe.cost),
+        name: powerupName(recipe.to),
+      });
+      craftBtn.onclick = () => {
+        ProgressStore.getInstance().craftPowerup(recipe.to);
+        fillStock();
+        syncCraft();
+      };
+      craftBtns.push(craftBtn);
+    }
     const syncCraft = () => {
       const counts = ProgressStore.getInstance().getPowerups();
-      craftArea.disabled = (counts.area ?? 0) < areaCost;
-      craftReveal.disabled = (counts.reveal_temp ?? 0) < revealCost;
-    };
-    craftArea.onclick = () => {
-      ProgressStore.getInstance().craftPowerup('area');
-      fillStock();
-      syncCraft();
-    };
-    craftReveal.onclick = () => {
-      ProgressStore.getInstance().craftPowerup('reveal_temp');
-      fillStock();
-      syncCraft();
+      CRAFT_RECIPES.forEach((recipe, i) => {
+        const btn = craftBtns[i];
+        if (!btn) return;
+        btn.disabled = !canCraft(counts, recipe.to);
+      });
     };
     syncCraft();
-    card.append(stockTitle, stock, craftArea, craftReveal);
+    card.append(stockTitle, stock, ...craftBtns);
     wrap.append(title, sub, card);
     return wrap;
   }
@@ -205,6 +229,22 @@ export class MenuView {
     const status = el('p', 'hub-pane-sub');
     wrap.appendChild(status);
 
+    if (!this.billing || !this.ads) {
+      sub.textContent = t('store.loading');
+      void Promise.all([ensureBilling(), ensureAds()]).then(([billing, ads]) => {
+        this.billing = billing;
+        this.ads = ads;
+        this.deliverQueued(billing);
+        if (this.tab === 'store') this.renderPane();
+      });
+      return wrap;
+    }
+
+    const billing = this.billing;
+    const ads = this.ads;
+    this.deliverQueued(billing);
+    const products = billing.getProducts();
+
     for (const sku of STORE_SKUS) {
       const card = el('div', 'cream-card');
       const name = el('h3');
@@ -218,44 +258,95 @@ export class MenuView {
         const refreshAd = () => {
           const left = ProgressStore.getInstance().adsRemainingToday();
           leftover.textContent = left <= 0 ? t('store.adCap') : t('store.adLeft', { n: left });
-          action.disabled = left <= 0 || !import.meta.env.DEV;
+          action.disabled = left <= 0 || !ads.available;
         };
-        if (import.meta.env.DEV) {
-          action.textContent = t('store.adSimulate');
-          action.onclick = () => {
-            const pack = ProgressStore.getInstance().tryClaimAdCommon();
-            refreshAd();
-            this.syncChips();
-            status.textContent = packHasItems(pack) ? t('store.granted', { name: formatPack(pack!) }) : t('store.adCap');
-          };
-        } else {
-          action.textContent = t('store.iapSoon');
+        if (!ads.available) {
+          action.textContent = t('store.adUnavailable');
           action.disabled = true;
+        } else {
+          action.textContent = ads.simulated ? t('store.adSimulate') : t('store.adWatch');
+          action.onclick = () => {
+            void this.watchAd(action, status, refreshAd);
+          };
         }
         refreshAd();
         card.append(name, body, leftover, action);
       } else {
-        name.textContent = sku.id === 'pack_handy' ? t('store.packHandy') : t('store.packRare');
-        body.textContent = formatPack(sku.pack);
+        const iap = sku as StoreSku & { id: IapSkuId; kind: 'iap' };
+        const catalog = products.find((row) => row.id === iap.id);
+        name.textContent = iap.id === 'pack_handy' ? t('store.packHandy') : t('store.packRare');
+        body.textContent = formatPack(iap.pack);
         const hint = el('p');
-        hint.textContent = sku.id === 'pack_handy' ? t('store.packHandyHint') : t('store.packRareHint');
-        if (SIMULATE_IAP) {
-          action.textContent = t('store.simulateBuy');
-          action.onclick = () => {
-            if (!confirm(t('store.simulateConfirm'))) return;
-            ProgressStore.getInstance().grantPack(sku.pack);
-            this.syncChips();
-            status.textContent = t('store.granted', { name: formatPack(sku.pack) });
-          };
-        } else {
-          action.textContent = t('store.iapSoon');
-          action.disabled = true;
-        }
+        hint.textContent = iap.id === 'pack_handy' ? t('store.packHandyHint') : t('store.packRareHint');
+        action.textContent = iapActionLabel(billing, catalog);
+        action.onclick = () => {
+          void this.buyIap(iap, action, status, catalog);
+        };
         card.append(name, body, hint, action);
       }
       wrap.appendChild(card);
     }
     return wrap;
+  }
+
+  private deliverQueued(billing: BillingPort) {
+    for (const id of billing.drainQueued()) {
+      const sku = getIapSku(id);
+      if (!sku) continue;
+      ProgressStore.getInstance().grantPack(sku.pack);
+    }
+  }
+
+  private async watchAd(
+    action: HTMLButtonElement,
+    status: HTMLElement,
+    refreshAd: () => void,
+  ) {
+    const ads = this.ads ?? (await ensureAds());
+    if (ProgressStore.getInstance().adsRemainingToday() <= 0) {
+      refreshAd();
+      status.textContent = t('store.adCap');
+      return;
+    }
+    if (ads.simulated && !confirm(t('store.adSimulateConfirm'))) return;
+    action.disabled = true;
+    action.textContent = t('store.adWatching');
+    const result = await ads.watchRewarded();
+    if (result.status === 'rewarded') {
+      const pack = ProgressStore.getInstance().tryClaimAdCommon();
+      status.textContent = packHasItems(pack) ? t('store.granted', { name: formatPack(pack!) }) : t('store.adCap');
+    } else if (result.status === 'cancelled') {
+      status.textContent = t('store.adCancelled');
+    } else {
+      status.textContent = result.message === 'unavailable' ? t('store.adUnavailable') : t('store.adError');
+    }
+    refreshAd();
+    if (ads.available && ProgressStore.getInstance().adsRemainingToday() > 0) {
+      action.textContent = ads.simulated ? t('store.adSimulate') : t('store.adWatch');
+    }
+  }
+
+  private async buyIap(
+    sku: StoreSku & { id: IapSkuId },
+    action: HTMLButtonElement,
+    status: HTMLElement,
+    catalog: CatalogProduct | undefined,
+  ) {
+    const billing = this.billing ?? getBilling();
+    if (billing.simulated && !confirm(t('store.simulateConfirm'))) return;
+    action.disabled = true;
+    action.textContent = t('store.buying');
+    const result = await billing.purchase(sku.id);
+    if (result.status === 'purchased') {
+      ProgressStore.getInstance().grantPack(sku.pack);
+      status.textContent = t('store.granted', { name: formatPack(sku.pack) });
+    } else if (result.status === 'cancelled') {
+      status.textContent = t('store.cancelled');
+    } else {
+      status.textContent = result.message === 'unavailable' ? t('store.unavailable') : t('store.error');
+    }
+    action.disabled = false;
+    action.textContent = iapActionLabel(billing, catalog ?? billing.getProducts().find((row) => row.id === sku.id));
   }
 
   private openSettings() {
@@ -337,17 +428,25 @@ export class MenuView {
     const best = store.getBestMs(level.id);
     this.openSheet((sheet, close) => {
       const img = document.createElement('img');
-      img.src = withDevCacheBust(level.thumbUrl ?? level.imageUrl);
       img.alt = getLevelTitle(level);
-      void ensureImage('thumb', level.id, level.thumbUrl ?? level.imageUrl).then((src) => {
-        img.src = withDevCacheBust(src);
-      });
+      this.bindThumb(sheet, img, level);
       const title = el('h2');
       title.textContent = index !== null ? t('level.title', { n: index + 1 }) : getLevelTitle(level);
       const meta = el('div', 'hub-sheet-meta');
       const pieces = el('span');
       pieces.textContent = t('start.pieces', { n: level.difficulty });
       meta.appendChild(pieces);
+      const addShape = () => {
+        if (!img.naturalWidth || meta.querySelector('[data-shape]')) return;
+        const shape = boardShape(img.naturalWidth, img.naturalHeight);
+        const chip = el('span');
+        chip.dataset.shape = shape;
+        chip.textContent =
+          shape === 'square' ? t('start.shapeSquare') : shape === 'landscape' ? t('start.shapeLandscape') : t('start.shapePortrait');
+        meta.appendChild(chip);
+      };
+      img.addEventListener('load', addShape);
+      if (img.complete) addShape();
       if (best !== null) {
         const rec = el('span');
         rec.textContent = t('hud.record', { time: formatTimer(best) });
@@ -361,6 +460,30 @@ export class MenuView {
         this.onPlay(level.id);
       };
       sheet.append(img, title, meta, play);
+      if (best !== null) {
+        const cup = el('button', 'hud-cup');
+        cup.type = 'button';
+        cup.innerHTML = iconHtml('cup');
+        cup.title = t('rank.open');
+        cup.setAttribute('aria-label', t('rank.open'));
+        const rankLabel = el('span', 'hud-cup-rank');
+        rankLabel.textContent = t('rank.open');
+        cup.appendChild(rankLabel);
+        cup.onclick = () => {
+          void (async () => {
+            cup.disabled = true;
+            cup.classList.add('is-loading');
+            const result = await submitScore(level.id, best);
+            cup.disabled = false;
+            cup.classList.remove('is-loading');
+            rankLabel.textContent = result.board?.my_rank
+              ? t('rank.position', { n: result.board.my_rank })
+              : t('rank.open');
+            openRankingSheet(this.root, result.board, result.error);
+          })();
+        };
+        sheet.appendChild(cup);
+      }
     });
   }
 
@@ -381,14 +504,12 @@ export class MenuView {
     const btn = el('button', `menu-card${unlocked ? '' : ' is-locked'}`);
     btn.type = 'button';
     btn.disabled = !unlocked;
+    const img = document.createElement('img');
+    img.alt = unlocked ? title : '';
+    if (!unlocked) img.setAttribute('aria-hidden', 'true');
+    this.bindThumb(btn, img, level);
+    btn.appendChild(img);
     if (unlocked) {
-      const img = document.createElement('img');
-      img.src = withDevCacheBust(level.thumbUrl ?? level.imageUrl);
-      img.alt = title;
-      void ensureImage('thumb', level.id, level.thumbUrl ?? level.imageUrl).then((src) => {
-        img.src = withDevCacheBust(src);
-      });
-      btn.appendChild(img);
       btn.onclick = () => this.openStart(level, index);
     } else {
       const lock = el('span', 'menu-lock');
@@ -412,11 +533,8 @@ export class MenuView {
     const btn = el('button', 'event-island');
     btn.type = 'button';
     const img = document.createElement('img');
-    img.src = withDevCacheBust(level.thumbUrl ?? level.imageUrl);
     img.alt = title;
-    void ensureImage('thumb', level.id, level.thumbUrl ?? level.imageUrl).then((src) => {
-      img.src = withDevCacheBust(src);
-    });
+    this.bindThumb(btn, img, level);
     const meta = el('div', 'event-island-meta');
     const name = el('span');
     name.textContent = title;
@@ -427,6 +545,53 @@ export class MenuView {
     btn.onclick = () => this.openStart(level, null);
     return btn;
   }
+
+  private emptyEventIsland(type: EventSlotType) {
+    const btn = el('button', 'event-island is-empty');
+    btn.type = 'button';
+    btn.disabled = true;
+    const mark = el('span', 'event-empty-mark');
+    mark.textContent = '?';
+    const meta = el('div', 'event-island-meta');
+    const name = el('span');
+    name.textContent = eventSlotTitle(type);
+    const extra = el('span');
+    extra.textContent = emptyEventCopy(type);
+    meta.append(name, extra);
+    btn.append(mark, meta);
+    return btn;
+  }
+
+  private bindThumb(host: HTMLElement, img: HTMLImageElement, level: LevelData) {
+    host.classList.add('is-thumb-loading');
+    const url = level.thumbUrl ?? level.imageUrl;
+    void ensureImage('thumb', level.id, url)
+      .then((src) => {
+        const reveal = () => host.classList.remove('is-thumb-loading');
+        img.addEventListener('load', reveal, { once: true });
+        img.src = withDevCacheBust(src);
+        if (img.complete) reveal();
+      })
+      .catch(() => host.classList.remove('is-thumb-loading'));
+  }
+}
+
+function eventSlotTitle(type: EventSlotType): string {
+  if (type === 'daily') return t('event.daily');
+  if (type === 'weekly') return t('event.weekly');
+  return t('event.monthly');
+}
+
+function emptyEventCopy(type: EventSlotType): string {
+  if (type === 'daily') return t('event.noneDaily');
+  if (type === 'weekly') return t('event.noneWeekly');
+  return t('event.noneMonthly');
+}
+
+function iapActionLabel(billing: BillingPort, catalog: CatalogProduct | undefined): string {
+  if (billing.simulated) return t('store.simulateBuy');
+  if (catalog?.priceLabel) return t('store.buyFor', { price: catalog.priceLabel });
+  return t('store.buy');
 }
 
 function currentUnlockId(store: ProgressStore): string {

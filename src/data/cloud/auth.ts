@@ -1,22 +1,29 @@
 import { ProgressStore } from '../ProgressStore';
 import { getSupabase, isCloudConfigured } from './supabase';
 
-export async function ensureCloudSession(): Promise<void> {
-  if (!isCloudConfigured()) return;
+export async function ensureCloudSession(): Promise<boolean> {
+  if (!isCloudConfigured()) return false;
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase) return false;
   try {
     const { data } = await supabase.auth.getSession();
     let userId = data.session?.user.id;
     if (!userId) {
       const signed = await supabase.auth.signInAnonymously();
+      if (signed.error) {
+        console.error('Anonymous sign-in failed', signed.error.message);
+        return false;
+      }
       userId = signed.data.user?.id ?? undefined;
     }
-    if (!userId) return;
+    if (!userId) return false;
     const nickname = ProgressStore.getInstance().getNickname();
-    await supabase.from('profiles').upsert({ id: userId, nickname: nickname || null });
-  } catch {
-    // Offline or anonymous auth not enabled yet.
+    const { error } = await supabase.from('profiles').upsert({ id: userId, nickname: nickname || null });
+    if (error) console.error('Profile upsert failed', error.message);
+    return true;
+  } catch (err) {
+    console.error('Cloud session failed', err);
+    return false;
   }
 }
 

@@ -1,6 +1,8 @@
 import { ProgressStore } from '../data/ProgressStore';
-import { consume, craft, hasCharges, type PowerupCounts } from './inventory';
-import { BOARD_SCATTER_GAP, BOARD_SCATTER_MARGIN, REVEAL_EYE_ALPHA, REVEAL_PERM_ALPHA, REVEAL_TEMP_ALPHA, REVEAL_TEMP_MS, type PlayMode, type PowerupKey } from './product';
+import { consume, craft as craftInventory, hasCharges, type PowerupCounts } from './inventory';
+import type { PieceId } from './pieceId';
+import { allowCampaignWinDouble, packHasItems, type PowerupPack } from './powerups';
+import { BOARD_WORLD_PAD, REVEAL_EYE_ALPHA, REVEAL_PERM_ALPHA, REVEAL_TEMP_ALPHA, REVEAL_TEMP_MS, type PlayMode, type PowerupKey } from './product';
 import type { JigsawLayout } from './jigsaw';
 import { SeededRng } from './rng';
 import { canSnap, normalizeAngle } from './snapRules';
@@ -15,8 +17,6 @@ import type {
   SessionEvent,
   SessionListener,
 } from './types';
-import type { PieceId } from './pieceId';
-import type { PowerupPack } from './powerups';
 
 export interface SessionInit {
   level: LevelInfo;
@@ -28,6 +28,8 @@ export interface SessionInit {
   qualityReduced?: { from: number; to: number };
   store?: ProgressStore;
   now?: () => number;
+  /** When set, campaign `save()` must not replace another level's in-progress slot. */
+  skipCampaignSave?: boolean;
 }
 
 export class PuzzleSession {
@@ -52,6 +54,7 @@ export class PuzzleSession {
   private inventory: PowerupCounts;
   private wonEmitted = false;
   private timerEmitAcc = 0;
+  private skipCampaignSave = false;
   readonly qualityGate?: { from: number; to: number };
 
   constructor(init: SessionInit) {
@@ -63,6 +66,7 @@ export class PuzzleSession {
     this.bounds = init.bounds;
     this.store = init.store ?? ProgressStore.getInstance();
     this.now = init.now ?? (() => Date.now());
+    this.skipCampaignSave = !!init.skipCampaignSave;
     this.inventory = this.store.getPowerups();
     this.qualityGate = init.qualityReduced;
     this.buildPieces(init);
@@ -135,6 +139,11 @@ export class PuzzleSession {
   movePiece(id: PieceId, x: number, y: number) {
     const piece = this.pieces.get(id);
     if (!piece || piece.isSolved) return;
+    if (piece.inTray) {
+      piece.inTray = false;
+      this.reindexTray();
+      this.emit({ type: 'pieceTrayChanged', id, inTray: false });
+    }
     piece.x = x;
     piece.y = y;
     this.emit({ type: 'pieceMoved', id, x, y });
@@ -145,6 +154,24 @@ export class PuzzleSession {
     if (!piece || piece.isSolved) return;
     piece.angle = normalizeAngle(piece.angle + 90);
     this.emit({ type: 'pieceRotated', id, angle: piece.angle });
+  }
+
+  returnToTray(id: PieceId, insertIndex?: number): boolean {
+    const piece = this.pieces.get(id);
+    if (!piece || piece.isSolved) return false;
+    piece.inTray = true;
+    piece.x = piece.correctX;
+    piece.y = piece.correctY;
+    this.reindexTray({ id, index: insertIndex });
+    this.emit({ type: 'pieceTrayChanged', id, inTray: true });
+    this.save();
+    return true;
+  }
+
+  getTrayPieces() {
+    return this.getPieces()
+      .filter((p) => p.inTray && !p.isSolved)
+      .sort((a, b) => a.trayIndex - b.trayIndex);
   }
 
   trySnap(id: PieceId): boolean {
@@ -158,10 +185,16 @@ export class PuzzleSession {
   placePiece(id: PieceId, opts: { consume?: PowerupKey; silent?: boolean } = {}): boolean {
     const piece = this.pieces.get(id);
     if (!piece || piece.isSolved) return false;
+    const wasInTray = piece.inTray;
     piece.isSolved = true;
+    piece.inTray = false;
     piece.x = piece.correctX;
     piece.y = piece.correctY;
     piece.angle = 0;
+    if (wasInTray) {
+      this.reindexTray();
+      this.emit({ type: 'pieceTrayChanged', id, inTray: false });
+    }
     if (opts.consume && this.mode !== 'replay') {
       this.applyConsume(opts.consume);
     }
@@ -183,6 +216,8 @@ export class PuzzleSession {
         bestMs: result.bestMs,
         isRecord: result.isRecord,
         rewards: result.rewards,
+        allowWinDouble: result.allowWinDouble,
+        replayFarm: result.replayFarm,
       });
     }
     return true;
@@ -200,6 +235,35 @@ export class PuzzleSession {
     return this.placePiece(id, { consume: 'hint' });
   }
 
+  queueLucky(): PieceId | null {
+    if (this.mode === 'replay') return null;
+    if (!hasCharges(this.inventory, 'lucky')) return null;
+    const unsolved = this.getPieces().filter((p) => !p.isSolved);
+    if (unsolved.length === 0) return null;
+    return unsolved[Math.floor(Math.random() * unsolved.length)]!.id;
+  }
+
+  confirmLucky(id: PieceId): boolean {
+    return this.placePiece(id, { consume: 'lucky' });
+  }
+
+  queueSolver(startCol: number, startRow: number, size: number): PieceId[] {
+    if (this.mode === 'replay') return [];
+    if (!hasCharges(this.inventory, 'solver')) return [];
+    const endCol = startCol + size - 1;
+    const endRow = startRow + size - 1;
+    const selected = this.getPieces().filter(
+      (p) => !p.isSolved && p.col >= startCol && p.col <= endCol && p.row >= startRow && p.row <= endRow,
+    );
+    if (selected.length === 0) return [];
+    this.applyConsume('solver');
+    return selected.map((p) => p.id);
+  }
+
+  confirmSolver(id: PieceId): boolean {
+    return this.placePiece(id);
+  }
+
   useArea(startCol: number, startRow: number, size: number): PieceId[] {
     if (this.mode === 'replay') return [];
     const key: PowerupKey = size >= 4 ? 'sarea' : 'area';
@@ -213,9 +277,14 @@ export class PuzzleSession {
 
     const target = this.findGroupTarget(selected, startCol, startRow, size);
     for (const piece of selected) {
+      const wasInTray = piece.inTray;
+      piece.inTray = false;
       piece.x = target.x + (Math.random() * 100 - 50);
       piece.y = target.y + (Math.random() * 100 - 50);
+      if (wasInTray) this.emit({ type: 'pieceTrayChanged', id: piece.id, inTray: false });
+      this.emit({ type: 'pieceMoved', id: piece.id, x: piece.x, y: piece.y });
     }
+    this.reindexTray();
     this.applyConsume(key);
     const ids = selected.map((p) => p.id);
     this.save();
@@ -227,15 +296,14 @@ export class PuzzleSession {
     this.emit({ type: 'revealChanged' });
   }
 
-  togglePermanentReveal(): boolean {
+  activatePermanentReveal(): boolean {
     if (this.mode === 'replay') return false;
-    if (!this.reveal.permanent && !hasCharges(this.inventory, 'reveal_perm')) return false;
-    this.reveal.permanent = !this.reveal.permanent;
-    if (this.reveal.permanent) {
-      this.reveal.temporary = false;
-      this.reveal.temporaryEndsAt = null;
-      this.applyConsume('reveal_perm');
-    }
+    if (this.reveal.permanent) return false;
+    if (!hasCharges(this.inventory, 'reveal_perm')) return false;
+    this.reveal.permanent = true;
+    this.reveal.temporary = false;
+    this.reveal.temporaryEndsAt = null;
+    this.applyConsume('reveal_perm');
     this.emit({ type: 'revealChanged' });
     this.save();
     return true;
@@ -252,27 +320,10 @@ export class PuzzleSession {
     return true;
   }
 
-  private upgradeFrom(from: PowerupKey): boolean {
-    const next = craft(this.inventory, from);
-    if (!next) return false;
-    this.inventory = next;
-    this.store.setPowerups(this.inventory);
-    this.emit({ type: 'inventoryChanged' });
-    return true;
-  }
-
-  upgradeArea() {
-    return this.upgradeFrom('area');
-  }
-
-  upgradeReveal() {
-    return this.upgradeFrom('reveal_temp');
-  }
-
   save() {
-    if (this.mode === 'replay' || this.wonEmitted || isWon(this.pieces.values())) return;
+    if (this.mode === 'replay' || this.skipCampaignSave || this.wonEmitted || isWon(this.pieces.values())) return;
     const saved: SavedSession = {
-      version: 3,
+      version: 4,
       levelId: this.levelId,
       pieces: this.getPieces().map((p) => ({
         id: p.id,
@@ -280,6 +331,8 @@ export class PuzzleSession {
         y: p.y,
         angle: p.angle,
         isSolved: p.isSolved,
+        inTray: p.inTray,
+        trayIndex: p.trayIndex,
       })),
       revealPermanent: this.reveal.permanent,
       elapsedMs: this.timer.getElapsed(),
@@ -294,23 +347,44 @@ export class PuzzleSession {
     lastMs: number;
     isRecord: boolean;
     rewards: PowerupPack | null;
+    allowWinDouble: boolean;
+    replayFarm: boolean;
   } {
     const result = this.store.recordClear(this.levelId, this.timer.getElapsed());
     let rewards: PowerupPack | null = null;
+    let allowWinDouble = false;
     if (this.mode !== 'replay') {
       if (!this.special && this.levelId.startsWith('level_')) {
         const num = parseInt(this.levelId.replace('level_', ''), 10);
         const unlocked = this.store.completeLevel(num - 1);
-        rewards = this.store.tryClaimCampaignFirstClear(unlocked);
+        rewards = this.store.tryClaimCampaignFirstClear(unlocked, num, this.layout.pieces.length);
+        allowWinDouble = !!rewards && allowCampaignWinDouble(num);
       }
       if (this.special && this.eventType) {
         rewards = this.store.tryClaimEventReward(this.eventType, this.levelId, this.now());
+        allowWinDouble = !!rewards;
       }
       if (rewards) this.inventory = this.store.getPowerups();
     }
     if (this.special) this.store.clearSpecialSession(this.levelId);
-    else this.store.clearSession();
-    return { ...result, rewards };
+    else this.store.clearCampaignSessionIf(this.levelId);
+    return { ...result, rewards, allowWinDouble, replayFarm: !rewards };
+  }
+
+  grantWinPack(pack: PowerupPack) {
+    if (!packHasItems(pack)) return;
+    this.store.grantPack(pack);
+    this.inventory = this.store.getPowerups();
+    this.emit({ type: 'inventoryChanged' });
+  }
+
+  craft(to: PowerupKey): boolean {
+    const next = craftInventory(this.inventory, to);
+    if (!next) return false;
+    this.inventory = next;
+    this.store.setPowerups(this.inventory);
+    this.emit({ type: 'inventoryChanged' });
+    return true;
   }
 
   private applyConsume(key: PowerupKey) {
@@ -351,7 +425,7 @@ export class PuzzleSession {
     const centerX = selRect.x + selRect.w / 2;
     const centerY = selRect.y + selRect.h / 2;
     const selectedSet = new Set(selected.map((p) => p.id));
-    const occupied = this.getPieces().filter((p) => !selectedSet.has(p.id) && !p.isSolved);
+    const occupied = this.getPieces().filter((p) => !selectedSet.has(p.id) && !p.isSolved && !p.inTray);
     const radius = Math.max(pw, ph) * 0.8;
     const isFree = (x: number, y: number) => occupied.every((p) => Math.hypot(p.x - x, p.y - y) >= radius);
 
@@ -373,7 +447,7 @@ export class PuzzleSession {
   private buildPieces(init: SessionInit) {
     const savedMap = new Map((init.saved?.pieces ?? []).map((p) => [p.id, p]));
     const { board } = init.bounds;
-    const scatterRng = new SeededRng(Date.now() % 2147483647);
+    const trayRng = new SeededRng(Date.now() % 2147483647);
 
     for (const def of init.layout.pieces) {
       const correctX = board.x + def.srcX + def.srcW / 2;
@@ -389,12 +463,15 @@ export class PuzzleSession {
         correctY,
         angle: 0,
         isSolved: false,
+        inTray: true,
+        trayIndex: 0,
         logicalWidth: def.srcW,
         logicalHeight: def.srcH,
       };
 
       if (init.mode === 'replay') {
         piece.isSolved = true;
+        piece.inTray = false;
       } else if (init.mode === 'resume' && saved) {
         piece.x = saved.x;
         piece.y = saved.y;
@@ -404,49 +481,73 @@ export class PuzzleSession {
           piece.x = correctX;
           piece.y = correctY;
           piece.angle = 0;
+          piece.inTray = false;
+        } else if (typeof saved.inTray === 'boolean') {
+          piece.inTray = saved.inTray;
+        } else {
+          piece.inTray = true;
+        }
+        if (piece.inTray) {
+          piece.x = correctX;
+          piece.y = correctY;
         }
       } else {
-        this.scatter(piece, scatterRng);
+        this.shuffleToTray(piece, trayRng);
       }
       this.pieces.set(piece.id, piece);
     }
+    this.initTrayOrder(init, trayRng, savedMap);
   }
 
-  private scatter(piece: PieceState, rng: SeededRng) {
-    const { world, board } = this.bounds;
-    const edge = 20;
-    const gap = Math.max(piece.logicalWidth, piece.logicalHeight) / 2 + BOARD_SCATTER_GAP;
-    const minBand = gap + edge;
-    const zones: number[] = [];
-    if (board.y - world.y > minBand) zones.push(0);
-    if (world.x + world.width - (board.x + board.width) > minBand) zones.push(1);
-    if (world.y + world.height - (board.y + board.height) > minBand) zones.push(2);
-    if (board.x - world.x > minBand) zones.push(3);
-    const zone = zones.length ? rng.pick(zones) : rng.between(0, 3);
-
-    let minX = world.x + edge;
-    let maxX = world.x + world.width - edge;
-    let minY = world.y + edge;
-    let maxY = world.y + world.height - edge;
-
-    if (zone === 0) {
-      minY = world.y + edge;
-      maxY = board.y - gap;
-    } else if (zone === 1) {
-      minX = board.x + board.width + gap;
-      maxX = world.x + world.width - edge;
-    } else if (zone === 2) {
-      minY = board.y + board.height + gap;
-      maxY = world.y + world.height - edge;
+  private initTrayOrder(
+    init: SessionInit,
+    rng: SeededRng,
+    savedMap: Map<PieceId, { trayIndex?: number }>,
+  ) {
+    const tray = this.getPieces().filter((p) => p.inTray && !p.isSolved);
+    if (init.mode === 'resume') {
+      tray.sort((a, b) => {
+        const ia = savedMap.get(a.id)?.trayIndex;
+        const ib = savedMap.get(b.id)?.trayIndex;
+        if (typeof ia === 'number' && typeof ib === 'number' && ia !== ib) return ia - ib;
+        if (typeof ia === 'number') return -1;
+        if (typeof ib === 'number') return 1;
+        return a.col - b.col || a.row - b.row;
+      });
     } else {
-      minX = world.x + edge;
-      maxX = board.x - gap;
+      for (let i = tray.length - 1; i > 0; i--) {
+        const j = rng.between(0, i);
+        const tmp = tray[i]!;
+        tray[i] = tray[j]!;
+        tray[j] = tmp;
+      }
     }
-    if (minX > maxX) minX = maxX;
-    if (minY > maxY) minY = maxY;
-    piece.x = rng.between(Math.floor(minX), Math.floor(maxX));
-    piece.y = rng.between(Math.floor(minY), Math.floor(maxY));
+    tray.forEach((p, i) => {
+      p.trayIndex = i;
+    });
+  }
+
+  private reindexTray(insert?: { id: PieceId; index?: number }) {
+    const moving = insert ? this.pieces.get(insert.id) : undefined;
+    const tray = this.getPieces()
+      .filter((p) => p.inTray && !p.isSolved && p.id !== insert?.id)
+      .sort((a, b) => a.trayIndex - b.trayIndex);
+    if (moving && moving.inTray) {
+      const idx =
+        insert?.index === undefined ? tray.length : Math.max(0, Math.min(insert.index, tray.length));
+      tray.splice(idx, 0, moving);
+    }
+    tray.forEach((p, i) => {
+      p.trayIndex = i;
+    });
+  }
+
+  private shuffleToTray(piece: PieceState, rng: SeededRng) {
+    piece.inTray = true;
+    piece.x = piece.correctX;
+    piece.y = piece.correctY;
     piece.angle = rng.pick([0, 90, 180, 270]);
+    piece.isSolved = false;
   }
 
   private emit(event: SessionEvent) {
@@ -455,7 +556,7 @@ export class PuzzleSession {
 }
 
 export function makeScatterBounds(imageWidth: number, imageHeight: number): ScatterBounds {
-  const margin = BOARD_SCATTER_MARGIN;
+  const margin = BOARD_WORLD_PAD;
   return {
     world: { x: 0, y: 0, width: imageWidth + margin * 2, height: imageHeight + margin * 2 },
     board: { x: margin, y: margin, width: imageWidth, height: imageHeight },

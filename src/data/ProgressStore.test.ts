@@ -7,11 +7,11 @@ describe('ProgressStore economy', () => {
     const store = new ProgressStore(new MemoryStorage());
     const before = store.getPowerups();
     expect(store.completeLevel(0)).toBe(true);
-    expect(store.tryClaimCampaignFirstClear(true, () => 0)).toEqual({ hint: 1 });
+    expect(store.tryClaimCampaignFirstClear(true, 1, 16, () => 0)).toEqual({ hint: 1 });
     expect(store.getPowerups().hint).toBe(before.hint + 1);
     expect(store.getPowerups().area).toBe(before.area);
     expect(store.completeLevel(0)).toBe(false);
-    expect(store.tryClaimCampaignFirstClear(false)).toBeNull();
+    expect(store.tryClaimCampaignFirstClear(false, 1, 16)).toBeNull();
     expect(store.getPowerups().hint).toBe(before.hint + 1);
   });
 
@@ -40,13 +40,29 @@ describe('ProgressStore economy', () => {
     expect(ids).toHaveLength(5);
   });
 
-  it('crafts from the catalog', () => {
+  it('crafts from the catalog recipes', () => {
     const store = new ProgressStore(new MemoryStorage());
-    store.setPowerups({ ...store.getPowerups(), area: 4, sarea: 0, reveal_temp: 10, reveal_perm: 0 });
+    store.setPowerups({ ...store.getPowerups(), hint: 6, lucky: 3, reveal_temp: 11, area: 0, reveal_perm: 0 });
     expect(store.craftPowerup('area')).toBe(true);
-    expect(store.getPowerups()).toMatchObject({ area: 0, sarea: 1 });
-    expect(store.craftPowerup('reveal_temp')).toBe(true);
+    expect(store.getPowerups()).toMatchObject({ hint: 0, lucky: 0, reveal_temp: 10, area: 1 });
+    expect(store.craftPowerup('reveal_perm')).toBe(true);
     expect(store.getPowerups()).toMatchObject({ reveal_temp: 0, reveal_perm: 1 });
     expect(store.craftPowerup('hint')).toBe(false);
+  });
+
+  it('clears the campaign session only for that level', () => {
+    const store = new ProgressStore(new MemoryStorage());
+    store.saveSession({
+      version: 4,
+      levelId: 'level_3',
+      pieces: [],
+      revealPermanent: true,
+      elapsedMs: 10,
+      lastUpdated: 1,
+    });
+    store.clearCampaignSessionIf('level_9');
+    expect(store.getSession()?.levelId).toBe('level_3');
+    store.clearCampaignSessionIf('level_3');
+    expect(store.getSession()).toBeNull();
   });
 });

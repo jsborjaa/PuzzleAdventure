@@ -15,7 +15,7 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
+            android:screenOrientation="fullUser"
             android:exported="true">
 
             <intent-filter>
@@ -24,6 +24,10 @@
             </intent-filter>
 
         </activity>
+
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="@string/admob_app_id" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -39,4 +43,5 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="com.android.vending.BILLING" />
 </manifest>

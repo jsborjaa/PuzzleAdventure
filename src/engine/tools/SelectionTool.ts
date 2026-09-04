@@ -17,16 +17,35 @@ export class SelectionTool extends AbstractTool {
     this.graphics.setDepth(OVERLAY_DEPTH).setVisible(false);
   }
 
+  private lingerTimer = 0;
+
+  protected lingerHighlight(ms: number) {
+    this.clearLinger();
+    this.lingerTimer = window.setTimeout(() => {
+      this.lingerTimer = 0;
+      if (!this.graphics.scene) return;
+      this.graphics.clear().setVisible(false);
+      this.destroyPreview();
+    }, ms);
+  }
+
+  private clearLinger() {
+    if (this.lingerTimer) window.clearTimeout(this.lingerTimer);
+    this.lingerTimer = 0;
+  }
+
   protected onActivate() {
+    this.clearLinger();
     this.graphics.setVisible(true);
     this.scene.sys.canvas.style.cursor = 'crosshair';
     this.updateGraphics(this.scene.input.activePointer);
   }
 
   protected onDeactivate() {
+    this.scene.sys.canvas.style.cursor = 'default';
+    if (this.lingerTimer) return;
     this.graphics.clear().setVisible(false);
     this.destroyPreview();
-    this.scene.sys.canvas.style.cursor = 'default';
   }
 
   onPointerMove(pointer: Phaser.Input.Pointer) {
@@ -88,7 +107,7 @@ export class SelectionTool extends AbstractTool {
     this.preview.setVisible(true);
   }
 
-  private destroyPreview() {
+  protected destroyPreview() {
     this.preview?.destroy();
     this.preview = null;
   }

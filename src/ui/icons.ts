@@ -9,13 +9,17 @@ export type IconName =
   | 'sarea'
   | 'reveal_temp'
   | 'reveal_perm'
+  | 'lucky'
+  | 'solver'
   | 'peek'
   | 'replay'
   | 'chevronLeft'
   | 'chevronRight'
   | 'chevronUp'
   | 'chevronDown'
-  | 'cup';
+  | 'cup'
+  | 'commons'
+  | 'rares';
 
 const svg = (path: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
@@ -50,6 +54,12 @@ export function iconHtml(name: IconName): string {
       return svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 4h6"/>');
     case 'reveal_perm':
       return svg('<path d="M4.5 12c2.2-3.5 4.4-3.5 7.5 0 3.1 3.5 5.3 3.5 7.5 0M4.5 12c2.2 3.5 4.4 3.5 7.5 0 3.1-3.5 5.3-3.5 7.5 0"/>');
+    case 'lucky':
+      return svg(
+        '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/>',
+      );
+    case 'solver':
+      return svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12.5l2.8 2.8L16.5 9"/>');
     case 'peek':
       return svg('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>');
     case 'replay':
@@ -65,6 +75,14 @@ export function iconHtml(name: IconName): string {
     case 'cup':
       return svg(
         '<path d="M8 4h8v3a4 4 0 0 1-8 0V4z"/><path d="M16 5h3a3 3 0 0 1-3 4M8 5H5a3 3 0 0 0 3 4"/><path d="M10 15h4v3H10zM9 21h6"/>',
+      );
+    case 'commons':
+      return svg(
+        '<path d="M4 10h16v9H4z"/><path d="M4 10l2-3.5h12L20 10"/><path d="M8 6.5V10M12 4.5V10M16 6.5V10"/><path d="M10 15h4"/>',
+      );
+    case 'rares':
+      return svg(
+        '<path d="M12 4l6.5 7.5L12 21 5.5 11.5z"/><path d="M5.5 11.5h13M12 4v17"/><path d="M19 3.5v3M17.5 5h3"/>',
       );
   }
 }
