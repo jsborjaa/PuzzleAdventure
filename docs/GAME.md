@@ -132,14 +132,14 @@ src/main.ts     Entry (initI18n before Phaser)
 | `src/engine/board/` | Sprites, layers, guide image |
 | `src/engine/pipeline/` | Masked piece atlas, cache, jigsaw path |
 | `src/engine/input/` | Drag/rotate/snap, pan/pinch, tray hit-test |
-| `src/engine/tools/` | Encajar 1×1, Enviar (ficha), Imán 3×3, Imán+ 4×4, Completar 3×3, Vislumbrar / Ver ∞ |
+| `src/engine/tools/` | Encajar 1×1, Enviar (ficha), Imán 3×3, Imán+ 4×4 (same `AreaTool`), Completar 3×3, Vislumbrar / Ver ∞ (same `RevealTool`). Snap/Send/Fill share `flyPieceHome`. |
 | `src/engine/scenes/` | Boot → Menu → Game |
 | `src/i18n/messages.ts` | All UI copy: each key has `en` / `es` / `de` / `fr` / `pt` |
 | `src/ui/PlayShell.ts` | In-level grid: chrome, status, canvas hole, tray |
 | `src/ui/GameHud.ts` | Chrome (back, commons, rares, peek) + status + win card |
 | `src/ui/PieceTray.ts` | Unsolved-piece strip; tap-rotate; drag onto the board |
 | `src/ui/MenuView.ts` | Hub: map, events, store, workshop, settings, start sheet |
-| `src/ui/style.css` | Hub tokens, 3D buttons, dock, play-shell, HUD |
+| `src/ui/style.css` | Shared tokens (`--hud-round`, `--panel-lip`); 3D buttons, dock, play-shell, HUD |
 
 ### 4.3 Data flow (play)
 
@@ -255,7 +255,9 @@ Not a full-screen Phaser canvas with HUD overlays. `#app.play-active` is a grid;
 | Phaser `#game-container` | Center | Center |
 | Piece tray | Bottom **20%** height, scroll X | Right **20%** width, scroll Y |
 
-**Commons / Rares** open a popover over the status bar (`POWERUP_DEFS` by `tier`). Hold a tool and confirm by releasing on the photo. While **Peek** is held, pieces cannot be dragged or rotated (canvas or tray); the ghost still shows. Rares with a recipe show a **Craft** control listing the ingredient cost (stock 0 is fine) so you can craft in-level. After a hold-tool is used, the popover closes.
+**Commons / Rares** open a popover over the status bar (`POWERUP_DEFS` by `tier`). Hold a tool and drag onto the board (or onto a piece, for Send). The popover **hides as soon as a charge is picked up**, so Magnet / Fill are not covered by the menu; it is removed on release. The popover also closes on a **piece** (tray chip or board sprite) and on empty board, same as tapping outside chrome. Android hardware back closes it too. While **Peek** is held, pieces cannot be dragged or rotated (canvas or tray); the ghost still shows. Rares with a recipe show a **Craft** control listing the ingredient cost (stock 0 is fine) so you can craft in-level.
+
+Icons: Snap / Send are a puzzle piece plus inbound / outbound motion. Glimpse and Peek ∞ share Peek’s eye (20 vs ∞). Magnet / Magnet+ are **3×3 and 4×4 grids** (not a horseshoe). Fill is a 2×2 cluster.
 
 `#ui-layer` stays full-screen for the win card and toasts (`pointer-events: none` except overlays). Chrome and tray are **not** inside `#ui-layer`.
 
@@ -324,7 +326,7 @@ Inventory is a flat `Record<PowerupKey, number>` in `puzzle_adventure_powerups_v
 
 Commons share the same store value. Rares are the farm / craft output. Area is **rare** (no longer a common). A new player starts at **0** on every key; the first charges come from winning levels (or Store / ads).
 
-Hold-tools track **window** `pointermove`. Confirm uses Phaser `transformPointer(pageX, pageY)`. Reveal tools consume only if the pointer is released on the photo. Enviar also hit-tests tray chips (client coords). Peek-hold blocks piece drag/rotate so Glimpse / Peek ∞ cannot be played with the photo in view.
+Hold-tools track **window** `pointermove`. Confirm uses Phaser `transformPointer(pageX, pageY)`. Snap, Send, and Fill use one `flyPieceHome` tween (Fill is 600ms; the others 1000ms). Reveal tools consume only if the pointer is released on the photo. Enviar also hit-tests tray chips (client coords). Picking up a hold-tool stows the Commons/Rares popover (`is-aiming`) without cancelling the gesture; release removes it. Peek-hold blocks piece drag/rotate so Glimpse / Peek ∞ cannot be played with the photo in view. Magnet and Fill select unsolved pieces with the same `unsolvedInRect` helper.
 
 **Craft:** `CRAFT_RECIPES` in [`src/domain/powerups.ts`](../src/domain/powerups.ts). Hub **Workshop** has one button per recipe. The in-level Rares popover can craft the same recipes when ingredients suffice.
 
@@ -347,7 +349,7 @@ Hold-tools track **window** `pointermove`. Confirm uses Phaser `transformPointer
 
 Period keys live in `puzzle_adventure_claims_v1`. Replay and a second win in the same period show the existing win card with **no** reward list.
 
-**Store** does not grant packs itself. IAP calls `ensureBilling()` → `purchase(skuId)` and only then `grantPack`. Store ads call `ensureAds()` → `watchRewarded()` and only then `tryClaimAdCommon`. Win-card ads call `ensureAds()` then `grantWinPack` (no Store cap). Cancel / skip / error: no grant. See **8.9** and **8.10**.
+**Store** does not grant packs itself. IAP calls `ensureBilling()` → `purchase(skuId)` → `grantPack` (persist) → `finish(skuId)`. Store ads call `ensureAds()` → `watchRewarded()` and only then `tryClaimAdCommon`. Win-card ads call `ensureAds()` then `grantWinPack` (no Store cap). Cancel / skip / error: no grant. See **8.9** and **8.10**.
 
 Replay mode: tools and reveals that consume charges are no-ops. **Peek** (eye hold) still works, but pieces cannot be dragged or rotated while it is held. Completing a level that was already cleared (Desarmar y jugar) grants no free pack; the win card can offer a farm ad for 1 random common.
 
@@ -357,7 +359,7 @@ Replay mode: tools and reveals that consume charges are no-ops. **Peek** (eye ho
 - On each win: `{ bestMs, lastMs, clears }` in `puzzle_adventure_times_v1` (kept forever).
 - HUD shows **Récord**; overlay shows this run vs best plus champion cup.
 - Menu cards show best if present.
-- Global table: each win (and the start-sheet cup on a cleared level) calls `submit_score` with the **device best** after anonymous sign-in. If Anonymous is disabled, the sheet says the time could not be saved instead of pretending the board is empty. The RPC only overwrites the cloud row if this time is faster. `get_leaderboard` is top 10 + own rank.
+- Global table: each win (and the start-sheet cup on a cleared level) calls `submit_score` with the **device best** after anonymous sign-in. If Anonymous is disabled, the sheet says the time could not be saved instead of pretending the board is empty. The RPC only overwrites the cloud row if this time is faster (`best_ms >= 500`). Direct `INSERT`/`UPDATE` on `scores` is revoked; apply `supabase/migrations/20260908000000_scores_rpc_only.sql`. Nicknames are capped at 24 characters (client + `profiles` check). `get_leaderboard` is top 10 + own rank. Ranking nicknames go through `escapeHtml` before `innerHTML`.
 
 ### 8.5 Quality gate
 
@@ -405,10 +407,10 @@ Play Console app id **`com.puzzleadventure.app`**. In-app products are **consuma
 **Code path** (`src/data/billing/`):
 
 - `ensureBilling()` → `SimulateBilling` in Vite DEV, or when `SIMULATE_IAP` is true.
-- Android **production** → `PlayBilling` (`capacitor-plugin-cdv-purchase`): query price, `launchBillingFlow`, **acknowledge / finish**, then the Store calls `grantPack`.
+- Android **production** → `PlayBilling` (`capacitor-plugin-cdv-purchase`): query price, `launchBillingFlow`. The Store **grants and persists first**, then `finish()` / acknowledge. If `finish` fails after grant, the pack is kept (no second grant).
 - Production **web** → unavailable (no grant). Play Billing does not run in a browser; there is no Stripe/PayPal.
 
-Cancel / error: no pack. Purchases approved while the Store was not waiting are delivered via `drainQueued()`.
+Cancel / error: no pack. Purchases approved while the Store was not waiting are delivered via `drainQueued()` then `finish()`.
 
 **How to test (no in-app login):**
 
@@ -466,7 +468,8 @@ On load, keys starting with `pockets:` are deleted (legacy).
 |---|---|---|
 | `SNAP_DISTANCE_PX` | 30 | Snap radius |
 | `REVEAL_TEMP_MS` | 20_000 | Temp reveal duration |
-| `REVEAL_*_ALPHA` | 0.3 / 0.4 | Guide image opacity |
+| `REVEAL_GHOST_ALPHA` | 0.3 | Glimpse and Peek ∞ guide opacity |
+| `REVEAL_EYE_ALPHA` | 0.4 | Chrome Peek (hold) opacity |
 | `BOARD_WORLD_PAD` | 180 | World padding around the photo for pan/peek |
 | `CAMERA_FIT_VIEW_PAD` | 48 | Padding around the **board** for the opening zoom |
 | `CAMERA_ZOOM_MIN/MAX` | 0.15 / 3 | Pinch limits |
@@ -489,23 +492,24 @@ Piece interaction tap threshold: **10px** (`PieceInteraction.ts`). Rotate deboun
 
 | File | Covers |
 |---|---|
-| `PuzzleSession.test.ts` | Ids, tray on fresh, snap→win, hint consume, resume by id, v3→tray migrate, **no save after win**, first-clear / period grants |
+| `PuzzleSession.test.ts` | Ids, tray on fresh, snap→win, hint/Send/Fill/Magnet consume, resume by id, v3→tray migrate, **no save after win**, first-clear / period grants |
 | `boardShape.test.ts` | Square vs landscape vs portrait |
 | `grid.test.ts` | Grid, world→cell, clamp selection |
 | `pieceId.test.ts` | `level:col:row` parse |
 | `snapRules.test.ts` | Distance / angle |
 | `inventory.test.ts` | Consume / multi-ingredient craft / applyPack |
 | `powerups.test.ts` | Period keys, first-clear packs, craft recipes, IAP packs |
-| `ProgressStore.test.ts` | Claims, ad cap, craft |
+| `ProgressStore.test.ts` | Claims, ad cap, craft, nickname length |
 | `win.test.ts` | All solved |
 | `i18n.test.ts` | Interpolation, `pt-BR`→`pt`, saved locale, English fallback |
 | `catalogWindow.test.ts` | Map pages of 10 / last-page remainder |
 | `campaignDifficulty.test.ts` | Piece-count curve |
-| `billing.test.ts` | IAP sku ids + simulate port |
+| `billing.test.ts` | IAP sku ids + simulate `purchase` then `finish` |
 | `leaderboard.test.ts` | Parse `get_leaderboard` JSON (numbers or numeric strings) |
 | `ads.test.ts` | AdMob test ids + simulate port |
+| `escapeHtml.test.ts` | Ranking nickname sanitization |
 
-Engine, HUD, and Capacitor are **not** unit-tested. After play-shell / tray changes, verify in the browser at `http://localhost:5173/` (dev preview + Rotate): pull a piece from the tray (no leftover hole), rotate in the tray and on the board, drop, return, snap, Peek, tools, Back, and portrait↔landscape. Do **not** build an AAB until that local pass is good.
+Engine, HUD, and Capacitor are **not** unit-tested. After play-shell / tray changes, verify in the browser at `http://localhost:5173/` (dev preview + Rotate): pull a piece from the tray (no leftover hole), rotate in the tray and on the board, drop, return, snap, Peek, Encajar / Enviar / Imán / Completar fly-in, Back, and portrait↔landscape. With Commons/Rares open: pick a tool (menu hides, aim still works), pick a tray chip (menu closes), tap empty board (menu closes). Hub: dock, Settings gear, map chevrons, Store simulate. Do **not** build an AAB until that local pass is good.
 
 ---
 
@@ -565,3 +569,5 @@ Use this as the backlog seed, not as committed scope.
 **Add a language:** add the id to `LocaleId` and `SUPPORTED_LOCALES`, then fill it in every `loc({...})` (`tsc` lists the rest).
 
 **Do not** reintroduce pockets, per-piece canvases (use the atlas), or a second win/snap implementation in the engine.
+
+**Scores RPC-only:** apply `supabase/migrations/20260908000000_scores_rpc_only.sql` on the live project so `INSERT`/`UPDATE` on `scores` are revoked. Until that runs, the 500ms floor in `submit_score` can still be bypassed.

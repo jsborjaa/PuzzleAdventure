@@ -35,15 +35,9 @@ export async function syncNickname(nickname: string): Promise<void> {
     const { data } = await supabase.auth.getSession();
     const id = data.session?.user.id;
     if (!id) return;
-    await supabase.from('profiles').upsert({ id, nickname: nickname.trim() || null });
+    const stored = ProgressStore.getInstance().getNickname();
+    await supabase.from('profiles').upsert({ id, nickname: stored });
   } catch {
     // Keep the local nickname even if the network fails.
   }
-}
-
-export function fallbackPlayerName(userId: string | undefined, nickname: string | null): string {
-  const trimmed = nickname?.trim();
-  if (trimmed) return trimmed;
-  if (!userId) return 'Player';
-  return `Player-${userId.slice(0, 4)}`;
 }

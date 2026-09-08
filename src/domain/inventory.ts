@@ -16,20 +16,6 @@ export function consume(counts: PowerupCounts, key: PowerupKey): PowerupCounts |
   return { ...counts, [key]: counts[key] - 1 };
 }
 
-export function tryUpgrade(
-  counts: PowerupCounts,
-  from: PowerupKey,
-  to: PowerupKey,
-  cost: number,
-): PowerupCounts | null {
-  if ((counts[from] ?? 0) < cost) return null;
-  return {
-    ...counts,
-    [from]: counts[from] - cost,
-    [to]: (counts[to] ?? 0) + 1,
-  };
-}
-
 export function applyPack(counts: PowerupCounts, pack: Partial<PowerupCounts>): PowerupCounts {
   const next = { ...counts };
   (Object.keys(pack) as PowerupKey[]).forEach((key) => {
@@ -56,12 +42,4 @@ export function craft(counts: PowerupCounts, to: PowerupKey): PowerupCounts | nu
   }
   next[recipe.to] = (next[recipe.to] ?? 0) + 1;
   return next;
-}
-
-export function upgradeArea(counts: PowerupCounts): PowerupCounts | null {
-  return craft(counts, 'area');
-}
-
-export function upgradeReveal(counts: PowerupCounts): PowerupCounts | null {
-  return craft(counts, 'reveal_perm');
 }

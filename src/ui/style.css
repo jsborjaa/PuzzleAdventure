@@ -20,18 +20,21 @@
   --gold-lip: #d08900;
   --mint: #2ed9b0;
   --mint-lip: #168a70;
-  --lilac: #b07cff;
   --glass: rgba(42, 22, 72, 0.48);
   --shadow: 0 10px 24px rgba(59, 36, 96, 0.22);
+  --overlay-scrim: rgba(42, 22, 72, 0.55);
+  --hud-round: 44px;
+  --hud-round-icon: 30px;
+  --panel-border: 3px solid #fff;
+  --panel-radius: 18px;
+  --panel-radius-sm: 16px;
+  --panel-radius-lg: 28px;
+  --panel-lip: 0 6px 0 #e0b56a;
+  --panel-lip-deep: 0 8px 0 #e8c48a;
   --safe-top: max(12px, env(safe-area-inset-top));
   --safe-bottom: max(12px, env(safe-area-inset-bottom));
   --safe-left: max(12px, env(safe-area-inset-left));
   --safe-right: max(12px, env(safe-area-inset-right));
-  --dock-h: 72px;
-  --primary-color: var(--coral);
-  --secondary-color: var(--mint);
-  --accent-color: var(--gold);
-  --dark-bg: var(--sky-top);
 }
 
 * {
@@ -322,9 +325,9 @@ body {
   gap: 8px;
   padding: 8px;
   background: var(--cream);
-  border: 3px solid #fff;
-  border-radius: 18px;
-  box-shadow: 0 6px 0 #e0b56a, var(--shadow);
+  border: var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-lip), var(--shadow);
   z-index: 20;
   pointer-events: auto;
 }
@@ -366,6 +369,7 @@ body {
   white-space: normal;
   text-align: left;
   max-width: 160px;
+  box-shadow: 0 4px 0 var(--gold-lip), var(--shadow);
 }
 
 .hud-craft-label {
@@ -440,112 +444,6 @@ body {
   box-shadow: none;
 }
 
-.hud-top,
-.hud-bottom {
-  position: absolute;
-  left: var(--safe-left);
-  right: var(--safe-right);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  pointer-events: none;
-}
-
-.hud-top {
-  top: var(--safe-top);
-  justify-content: space-between;
-}
-
-.hud-top-mid {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  justify-content: center;
-  min-width: 0;
-  pointer-events: none;
-}
-
-.hud-top-mid > * {
-  pointer-events: auto;
-}
-
-.hud-top > .hud-round {
-  pointer-events: auto;
-}
-
-.hud-bottom {
-  left: auto;
-  right: var(--safe-right);
-  bottom: var(--safe-bottom);
-  width: 36px;
-  min-height: 36px;
-  justify-content: flex-end;
-}
-
-.hud-tools {
-  position: absolute;
-  right: calc(100% + 6px);
-  top: 50%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: min(78vw, 420px);
-  overflow: visible;
-  padding: 4px;
-  transform: translate(calc(100% + 24px), -50%);
-  opacity: 0;
-  visibility: hidden;
-  transition: transform 0.22s ease, opacity 0.18s ease, visibility 0.18s;
-  pointer-events: none;
-  touch-action: none;
-}
-
-.hud-bottom.is-open .hud-tools {
-  transform: translate(0, -50%);
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-
-.hud-bottom .hud-edge-tab {
-  border-radius: 14px 8px 8px 14px;
-}
-
-.hud-bottom.is-open .hud-tools > * {
-  pointer-events: auto;
-}
-
-.hud-edge-tab {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
-  padding: 0;
-  border-radius: 14px 14px 8px 8px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  pointer-events: auto;
-  background: var(--cream);
-  color: var(--ink);
-  border: 3px solid #fff;
-  box-shadow: 0 4px 0 #e0b56a;
-  cursor: pointer;
-  font-family: inherit;
-  touch-action: none;
-}
-
-.hud-edge-tab svg {
-  width: 18px;
-  height: 18px;
-  display: block;
-}
-
-.hud-edge-tab:active {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 #e0b56a;
-}
-
 .progress-bar-container {
   width: min(36vw, 180px);
   height: 14px;
@@ -565,8 +463,8 @@ body {
 
 .hud-glass {
   background: var(--cream);
-  border: 3px solid #fff;
-  border-radius: 16px;
+  border: var(--panel-border);
+  border-radius: var(--panel-radius-sm);
   padding: 4px 10px;
   color: var(--ink);
   box-shadow: 0 4px 0 #e0b56a;
@@ -596,9 +494,9 @@ body {
 }
 
 .hud-round {
-  width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: var(--hud-round);
+  height: var(--hud-round);
+  min-height: var(--hud-round);
   padding: 0;
   border-radius: 50%;
   display: grid;
@@ -608,8 +506,8 @@ body {
 }
 
 .hud-round svg {
-  width: 30px;
-  height: 30px;
+  width: var(--hud-round-icon);
+  height: var(--hud-round-icon);
   display: block;
   overflow: visible;
 }
@@ -637,7 +535,7 @@ body {
 .hud-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(42, 22, 72, 0.55);
+  background: var(--overlay-scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -648,12 +546,12 @@ body {
 .hud-card {
   background: var(--cream);
   border: 5px solid #fff;
-  border-radius: 28px;
+  border-radius: var(--panel-radius-lg);
   padding: 28px 24px;
   text-align: center;
   min-width: min(280px, 100%);
   max-width: 360px;
-  box-shadow: 0 8px 0 #e8c48a, var(--shadow);
+  box-shadow: var(--panel-lip-deep), var(--shadow);
   color: var(--ink);
   animation: pop-in 0.28s ease-out;
 }
@@ -880,17 +778,7 @@ body {
 }
 
 .hub-gear {
-  width: 44px;
-  height: 44px;
-  min-height: 44px;
-  padding: 0;
-  border-radius: 50%;
   margin-left: auto;
-}
-
-.hub-gear svg {
-  width: 24px;
-  height: 24px;
 }
 
 .hub-body {
@@ -934,6 +822,14 @@ body {
   min-width: 44px;
   font-size: 22px;
   line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
+.hub-slice svg {
+  width: 22px;
+  height: 22px;
+  display: block;
 }
 
 .menu-grid {
@@ -1180,7 +1076,7 @@ body {
   border: 4px solid #fff;
   border-radius: 22px;
   padding: 14px;
-  box-shadow: 0 6px 0 #e8c48a;
+  box-shadow: var(--panel-lip);
   color: var(--ink);
 }
 
@@ -1269,7 +1165,7 @@ body {
 .hub-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(42, 22, 72, 0.5);
+  background: var(--overlay-scrim);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1282,11 +1178,11 @@ body {
 .hub-sheet {
   background: var(--cream);
   border: 5px solid #fff;
-  border-radius: 28px 28px 20px 20px;
+  border-radius: var(--panel-radius-lg) var(--panel-radius-lg) 20px 20px;
   padding: 16px 16px 20px;
   width: min(420px, 100%);
   margin: auto 0 0;
-  box-shadow: 0 8px 0 #e8c48a, var(--shadow);
+  box-shadow: var(--panel-lip-deep), var(--shadow);
   animation: pop-in 0.24s ease-out;
   display: flex;
   flex-direction: column;
@@ -1327,20 +1223,14 @@ body {
 }
 
 @media (min-width: 769px) {
+  :root {
+    --hud-round: 52px;
+    --hud-round-icon: 34px;
+  }
+
   .progress-bar-container {
     width: 240px;
     height: 16px;
-  }
-
-  .hud-round {
-    width: 52px;
-    height: 52px;
-    min-height: 52px;
-  }
-
-  .hud-round svg {
-    width: 34px;
-    height: 34px;
   }
 }
 

@@ -36,6 +36,20 @@ export function roundButton(icon: IconName, label: string, tone: string, onClick
   return btn;
 }
 
+/** Hub / overlay control that fires on click (release), not pointerdown. */
+export function iconButton(name: IconName, className: string, label: string, onClick: () => void) {
+  const btn = el('button', className);
+  btn.type = 'button';
+  btn.innerHTML = iconHtml(name);
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return btn;
+}
+
 export function pagePoint(ev: Event): { x: number; y: number } {
   const pt = ev as PointerEvent;
   if (typeof pt.pageX === 'number') return { x: pt.pageX, y: pt.pageY };

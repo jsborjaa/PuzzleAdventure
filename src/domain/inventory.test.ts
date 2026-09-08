@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { consume, createInventory, hasCharges, applyPack, craft, upgradeReveal } from './inventory';
+import { consume, createInventory, hasCharges, applyPack, craft } from './inventory';
 
 describe('inventory', () => {
   it('starts with no charges for a new player', () => {
@@ -35,8 +35,8 @@ describe('inventory', () => {
       lucky: 0,
       solver: 1,
     });
-    expect(upgradeReveal(createInventory({ reveal_temp: 3, reveal_perm: 0 }))).toBeNull();
-    expect(upgradeReveal(createInventory({ reveal_temp: 10, reveal_perm: 0 }))).toMatchObject({
+    expect(craft(createInventory({ reveal_temp: 3, reveal_perm: 0 }), 'reveal_perm')).toBeNull();
+    expect(craft(createInventory({ reveal_temp: 10, reveal_perm: 0 }), 'reveal_perm')).toMatchObject({
       reveal_temp: 0,
       reveal_perm: 1,
     });

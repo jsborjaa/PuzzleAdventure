@@ -5,6 +5,7 @@ import { PuzzleBoard } from '../board/PuzzleBoard';
 import { clientToWorld } from '../input/PieceInteraction';
 import type { PieceTray } from '../../ui/PieceTray';
 import { AbstractTool } from './AbstractTool';
+import { flyPieceHome } from './flyPieceHome';
 
 export class LuckyTool extends AbstractTool {
   private lastPage = { x: 0, y: 0 };
@@ -43,30 +44,13 @@ export class LuckyTool extends AbstractTool {
     const id = this.targetAt(page.x, page.y);
     if (!id) return;
     if (!this.session.queueLucky(id)) return;
-    const sprite = this.board.getSprite(id);
-    const state = this.session.getPiece(id);
-    if (!sprite || !state) return;
+    const clientX = page.x - window.scrollX;
+    const clientY = page.y - window.scrollY;
+    const world = clientToWorld(this.scene, clientX, clientY);
     AudioService.getInstance().playSnap();
-    if (state.inTray) {
-      const world = clientToWorld(this.scene, page.x - window.scrollX, page.y - window.scrollY);
-      this.session.movePiece(id, world.x, world.y);
-    }
-    sprite.setVisible(true);
-    sprite.setDepth(1000);
-    sprite.disableInteractive();
-    this.scene.tweens.add({
-      targets: sprite,
-      x: state.correctX,
-      y: state.correctY,
-      angle: 0,
-      duration: 1000,
-      ease: 'Power2',
-      onComplete: () => {
-        if (this.session.confirmLucky(id)) {
-          this.onSolvedVisual(id);
-        }
-      },
-    });
+    flyPieceHome(this.scene, this.board, this.session, id, 1000, (pieceId) => {
+      if (this.session.confirmLucky(pieceId)) this.onSolvedVisual(pieceId);
+    }, world);
   }
 
   private targetAt(pageX: number, pageY: number): PieceId | null {

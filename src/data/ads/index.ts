@@ -24,11 +24,6 @@ class UnavailableAds implements AdsPort {
 
 let instance: AdsPort | null = null;
 
-export function getAds(): AdsPort {
-  if (!instance) instance = new SimulateAds();
-  return instance;
-}
-
 /** Resolve simulate vs AdMob. Safe to call more than once. */
 export async function ensureAds(): Promise<AdsPort> {
   if (isSimulatedAds()) {

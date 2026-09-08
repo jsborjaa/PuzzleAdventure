@@ -21,6 +21,7 @@ const LOCALE_KEY = 'puzzle_adventure_locale_v1';
 const CLAIMS_KEY = 'puzzle_adventure_claims_v1';
 const LAST_PLAYED_KEY = 'puzzle_adventure_last_played_v1';
 const NICKNAME_KEY = 'puzzle_adventure_nickname_v1';
+export const NICKNAME_MAX_LEN = 24;
 const LEGACY_SESSION_KEY = 'puzzle_adventure_active_session';
 const LEGACY_SPECIAL_KEY = 'puzzle_adventure_special_sessions_v1';
 const POCKET_KEY_PREFIX = 'pockets:';
@@ -204,7 +205,7 @@ export class ProgressStore {
   }
 
   setNickname(name: string) {
-    const trimmed = name.trim().slice(0, 24);
+    const trimmed = name.trim().slice(0, NICKNAME_MAX_LEN);
     this.nickname = trimmed.length > 0 ? trimmed : null;
     if (this.nickname) this.storage.setItem(NICKNAME_KEY, this.nickname);
     else this.storage.removeItem(NICKNAME_KEY);

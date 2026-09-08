@@ -112,6 +112,7 @@ export class PuzzleSession {
   }
 
   get guideAlpha(): number {
+    // Chrome Peek (hold) wins over Peek ∞, which wins over Glimpse.
     if (this.reveal.eyeHold) return REVEAL_EYE_ALPHA;
     if (this.reveal.permanent) return REVEAL_PERM_ALPHA;
     if (this.reveal.temporary) return REVEAL_TEMP_ALPHA;
@@ -250,11 +251,7 @@ export class PuzzleSession {
   queueSolver(startCol: number, startRow: number, size: number): PieceId[] {
     if (this.mode === 'replay') return [];
     if (!hasCharges(this.inventory, 'solver')) return [];
-    const endCol = startCol + size - 1;
-    const endRow = startRow + size - 1;
-    const selected = this.getPieces().filter(
-      (p) => !p.isSolved && p.col >= startCol && p.col <= endCol && p.row >= startRow && p.row <= endRow,
-    );
+    const selected = this.unsolvedInRect(startCol, startRow, size);
     if (selected.length === 0) return [];
     this.applyConsume('solver');
     return selected.map((p) => p.id);
@@ -268,11 +265,7 @@ export class PuzzleSession {
     if (this.mode === 'replay') return [];
     const key: PowerupKey = size >= 4 ? 'sarea' : 'area';
     if (!hasCharges(this.inventory, key)) return [];
-    const endCol = startCol + size - 1;
-    const endRow = startRow + size - 1;
-    const selected = this.getPieces().filter(
-      (p) => !p.isSolved && p.col >= startCol && p.col <= endCol && p.row >= startRow && p.row <= endRow,
-    );
+    const selected = this.unsolvedInRect(startCol, startRow, size);
     if (selected.length === 0) return [];
 
     const target = this.findGroupTarget(selected, startCol, startRow, size);
@@ -409,6 +402,14 @@ export class PuzzleSession {
       return neighbors[Math.floor(Math.random() * neighbors.length)]!;
     }
     return this.getPieces().find((p) => !p.isSolved && p.col === col && p.row === row) ?? null;
+  }
+
+  private unsolvedInRect(startCol: number, startRow: number, size: number): PieceState[] {
+    const endCol = startCol + size - 1;
+    const endRow = startRow + size - 1;
+    return this.getPieces().filter(
+      (p) => !p.isSolved && p.col >= startCol && p.col <= endCol && p.row >= startRow && p.row <= endRow,
+    );
   }
 
   private findGroupTarget(selected: PieceState[], startCol: number, startRow: number, size: number) {

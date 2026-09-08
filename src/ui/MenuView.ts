@@ -12,6 +12,7 @@ import { boardShape } from '../domain/boardShape';
 import { formatTimer } from '../domain/timer';
 import { getLocale, isLocaleId, setLocale, SUPPORTED_LOCALES, t, type LocaleId } from '../i18n';
 import { iconHtml, type IconName } from './icons';
+import { el, iconButton } from './dom';
 import { formatPack, powerupName } from './powerupLabel';
 import { openRankingSheet } from './rankingSheet';
 
@@ -34,7 +35,7 @@ export class MenuView {
     const top = el('header', 'hub-top');
     const logo = el('div', 'hub-logo');
     logo.innerHTML = `<span class="brand-top">${t('menu.brandPuzzle')}</span><span class="brand-bottom">${t('menu.brandAdventure')}</span>`;
-    const gear = iconButton('gear', 'hub-gear btn btn-mint', t('menu.settings'), () => this.openSettings());
+    const gear = iconButton('gear', 'hub-gear btn btn-mint hud-round', t('menu.settings'), () => this.openSettings());
     top.append(logo, gear);
 
     this.body = el('div', 'hub-body');
@@ -119,22 +120,14 @@ export class MenuView {
             total: catalog.getTotal(),
           });
     const nav = el('div', 'hub-map-nav');
-    const prev = el('button', 'btn btn-ghost hub-slice');
-    prev.type = 'button';
-    prev.textContent = '‹';
-    prev.title = t('menu.prevSlice');
-    prev.disabled = this.mapTurning || !catalog.canShift(-1);
-    prev.onclick = () => {
+    const prev = iconButton('chevronLeft', 'btn btn-ghost hub-slice', t('menu.prevSlice'), () => {
       void this.turnPage(-1);
-    };
-    const next = el('button', 'btn btn-ghost hub-slice');
-    next.type = 'button';
-    next.textContent = '›';
-    next.title = t('menu.nextSlice');
-    next.disabled = this.mapTurning || !catalog.canShift(1);
-    next.onclick = () => {
+    });
+    prev.disabled = this.mapTurning || !catalog.canShift(-1);
+    const next = iconButton('chevronRight', 'btn btn-ghost hub-slice', t('menu.nextSlice'), () => {
       void this.turnPage(1);
-    };
+    });
+    next.disabled = this.mapTurning || !catalog.canShift(1);
     nav.append(prev, pos, next);
 
     const grid = el('div', 'menu-grid');
@@ -294,6 +287,7 @@ export class MenuView {
       const sku = getIapSku(id);
       if (!sku) continue;
       ProgressStore.getInstance().grantPack(sku.pack);
+      void billing.finish(id);
     }
   }
 
@@ -339,6 +333,7 @@ export class MenuView {
     const result = await billing.purchase(sku.id);
     if (result.status === 'purchased') {
       ProgressStore.getInstance().grantPack(sku.pack);
+      await billing.finish(sku.id);
       status.textContent = t('store.granted', { name: formatPack(sku.pack) });
     } else if (result.status === 'cancelled') {
       status.textContent = t('store.cancelled');
@@ -607,23 +602,4 @@ function diffLabel(n: number) {
   if (n >= 500) return 'SSS';
   if (n >= 200) return 'SS';
   return 'S';
-}
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  return node;
-}
-
-function iconButton(name: IconName, className: string, label: string, onClick: () => void) {
-  const btn = el('button', className);
-  btn.type = 'button';
-  btn.innerHTML = iconHtml(name);
-  btn.title = label;
-  btn.setAttribute('aria-label', label);
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    onClick();
-  };
-  return btn;
 }

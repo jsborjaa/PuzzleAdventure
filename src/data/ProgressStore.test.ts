@@ -65,4 +65,10 @@ describe('ProgressStore economy', () => {
     store.clearCampaignSessionIf('level_3');
     expect(store.getSession()).toBeNull();
   });
+
+  it('clips nicknames to 24 characters', () => {
+    const store = new ProgressStore(new MemoryStorage());
+    store.setNickname(`  ${'n'.repeat(30)}  `);
+    expect(store.getNickname()).toBe('n'.repeat(24));
+  });
 });

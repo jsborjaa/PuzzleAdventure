@@ -1,6 +1,7 @@
 import type { PieceId } from '../../domain/pieceId';
 import { PuzzleSession } from '../../domain/PuzzleSession';
 import { AudioService } from '../audio/AudioService';
+import { flyPieceHome } from './flyPieceHome';
 import { SelectionTool } from './SelectionTool';
 
 export class SolverTool extends SelectionTool {
@@ -20,30 +21,11 @@ export class SolverTool extends SelectionTool {
     if (ids.length === 0) return;
     this.lingerHighlight(700);
     AudioService.getInstance().playSnap();
+    const world = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
     for (const id of ids) {
-      const sprite = this.board.getSprite(id);
-      const state = this.session.getPiece(id);
-      if (!sprite || !state) continue;
-      if (state.inTray) {
-        const world = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
-        this.session.movePiece(id, world.x, world.y);
-      }
-      sprite.setVisible(true);
-      sprite.setDepth(1000);
-      sprite.disableInteractive();
-      this.scene.tweens.add({
-        targets: sprite,
-        x: state.correctX,
-        y: state.correctY,
-        angle: 0,
-        duration: 600,
-        ease: 'Power2',
-        onComplete: () => {
-          if (this.session.confirmSolver(id)) {
-            this.onSolvedVisual(id);
-          }
-        },
-      });
+      flyPieceHome(this.scene, this.board, this.session, id, 600, (pieceId) => {
+        if (this.session.confirmSolver(pieceId)) this.onSolvedVisual(pieceId);
+      }, world);
     }
   }
 }

@@ -86,7 +86,7 @@ describe('PuzzleSession', () => {
     expect(session.getPiece(id!)?.isSolved).toBe(true);
   });
 
-  it('lucky consumes after confirm and solver places a 3×3', () => {
+  it('lucky consumes after confirm; Fill and Magnet share the same rect', () => {
     const luckyStore = new ProgressStore(new MemoryStorage());
     luckyStore.setPowerups({ ...luckyStore.getPowerups(), lucky: 1 });
     const session = makeSession('fresh', { store: luckyStore });
@@ -107,6 +107,14 @@ describe('PuzzleSession', () => {
     expect(solverSession.getInventory().solver).toBe(0);
     expect(solverSession.queueSolver(0, 0, 3)).toEqual([]);
     for (const id of ids) expect(solverSession.confirmSolver(id)).toBe(true);
+
+    const magnetStore = new ProgressStore(new MemoryStorage());
+    magnetStore.setPowerups({ ...magnetStore.getPowerups(), area: 1 });
+    const magnet = makeSession('fresh', { store: magnetStore });
+    const gathered = magnet.useArea(0, 0, 3);
+    expect(gathered.length).toBeGreaterThan(0);
+    expect(magnet.getInventory().area).toBe(0);
+    expect(magnet.useArea(0, 0, 3)).toEqual([]);
   });
 
   it('resumes from saved piece ids, not array indexes', () => {

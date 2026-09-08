@@ -1,7 +1,8 @@
 export const SNAP_DISTANCE_PX = 30;
 export const REVEAL_TEMP_MS = 20_000;
-export const REVEAL_PERM_ALPHA = 0.3;
-export const REVEAL_TEMP_ALPHA = 0.3;
+export const REVEAL_GHOST_ALPHA = 0.3;
+export const REVEAL_PERM_ALPHA = REVEAL_GHOST_ALPHA;
+export const REVEAL_TEMP_ALPHA = REVEAL_GHOST_ALPHA;
 export const REVEAL_EYE_ALPHA = 0.4;
 
 /** Padding around the photo for pan/peek. Pieces live in the tray, not in this band. */

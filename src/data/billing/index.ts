@@ -30,6 +30,10 @@ class UnavailableBilling implements BillingPort {
     return;
   }
 
+  async finish(_id: IapSkuId): Promise<void> {
+    return;
+  }
+
   drainQueued(): IapSkuId[] {
     return [];
   }

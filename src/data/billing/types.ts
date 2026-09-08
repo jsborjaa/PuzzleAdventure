@@ -17,6 +17,8 @@ export interface BillingPort {
   getProducts(): CatalogProduct[];
   purchase(id: IapSkuId): Promise<PurchaseResult>;
   restore(): Promise<void>;
+  /** Acknowledge a granted purchase with the store. No-op when simulating. */
+  finish(id: IapSkuId): Promise<void>;
   /** Purchases approved while the store UI was not waiting (crash after pay). */
   drainQueued(): IapSkuId[];
 }

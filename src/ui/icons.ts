@@ -15,8 +15,6 @@ export type IconName =
   | 'replay'
   | 'chevronLeft'
   | 'chevronRight'
-  | 'chevronUp'
-  | 'chevronDown'
   | 'cup'
   | 'commons'
   | 'rares';
@@ -81,10 +79,6 @@ export function iconHtml(name: IconName): string {
       return svg('<path d="M15 5l-7 7 7 7"/>');
     case 'chevronRight':
       return svg('<path d="M9 5l7 7-7 7"/>');
-    case 'chevronUp':
-      return svg('<path d="M5 15l7-7 7 7"/>');
-    case 'chevronDown':
-      return svg('<path d="M5 9l7 7 7-7"/>');
     case 'cup':
       return svg(
         '<path d="M8 4h8v3a4 4 0 0 1-8 0V4z"/><path d="M16 5h3a3 3 0 0 1-3 4M8 5H5a3 3 0 0 0 3 4"/><path d="M10 15h4v3H10zM9 21h6"/>',

@@ -9,6 +9,7 @@ export class PlayBilling implements BillingPort {
   private ready: Promise<void> | null = null;
   private inflight = new Map<IapSkuId, Resolver[]>();
   private queued: IapSkuId[] = [];
+  private pending = new Map<IapSkuId, Transaction>();
   private hooked = false;
 
   async ensureReady(): Promise<void> {
@@ -45,6 +46,19 @@ export class PlayBilling implements BillingPort {
 
   async restore(): Promise<void> {
     return;
+  }
+
+  async finish(id: IapSkuId): Promise<void> {
+    const tx = this.pending.get(id);
+    if (!tx) return;
+    for (const [sku, pending] of this.pending) {
+      if (pending === tx) this.pending.delete(sku);
+    }
+    try {
+      await tx.finish();
+    } catch {
+      // Pack already granted; Play may already have acknowledged.
+    }
   }
 
   drainQueued(): IapSkuId[] {
@@ -92,12 +106,8 @@ export class PlayBilling implements BillingPort {
 
   private async onApproved(transaction: Transaction) {
     const ids = transaction.products.map((row) => row.id).filter(isIapSkuId);
-    try {
-      await transaction.finish();
-    } catch {
-      // still deliver if Play already charged
-    }
     for (const id of ids) {
+      this.pending.set(id, transaction);
       const waiters = this.takeResolvers(id);
       if (waiters.length > 0) waiters.forEach((fn) => fn({ status: 'purchased' }));
       else this.queued.push(id);

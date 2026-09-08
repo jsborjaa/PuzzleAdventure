@@ -23,6 +23,7 @@ describe('billing', () => {
       { id: 'pack_rare', priceLabel: null },
     ]);
     expect(await billing.purchase('pack_handy')).toEqual({ status: 'purchased' });
+    await billing.finish('pack_handy');
     expect(billing.drainQueued()).toEqual([]);
   });
 
