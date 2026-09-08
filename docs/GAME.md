@@ -132,7 +132,7 @@ src/main.ts     Entry (initI18n before Phaser)
 | `src/engine/board/` | Sprites, layers, guide image |
 | `src/engine/pipeline/` | Masked piece atlas, cache, jigsaw path |
 | `src/engine/input/` | Drag/rotate/snap, pan/pinch, tray hit-test |
-| `src/engine/tools/` | Área 3×3, sÁrea 4×4, Pista 1×1, Lucky, Solver 3×3, 20s / Infinito |
+| `src/engine/tools/` | Encajar 1×1, Enviar (ficha), Imán 3×3, Imán+ 4×4, Completar 3×3, Vislumbrar / Ver ∞ |
 | `src/engine/scenes/` | Boot → Menu → Game |
 | `src/i18n/messages.ts` | All UI copy: each key has `en` / `es` / `de` / `fr` / `pt` |
 | `src/ui/PlayShell.ts` | In-level grid: chrome, status, canvas hole, tray |
@@ -312,19 +312,19 @@ If pieces look like an **old photo** after you replaced art: hard-refresh in dev
 
 Inventory is a flat `Record<PowerupKey, number>` in `puzzle_adventure_powerups_v1`, shared across all levels. **Add a new power-up as one row** in [`src/domain/powerups.ts`](../src/domain/powerups.ts) (`POWERUP_DEFS`); do not special-case craft or grants.
 
-| Id | Tier | Family | Default | Craft result | Effect |
-|---|---|---|---|---|---|
-| `hint` | common | place | 0 | ingredient | Hold, aim 1 cell. Animates that piece (or a random unsolved neighbor) into place, then `placePiece` + consume. |
-| `lucky` | common | place | 0 | ingredient | Hold, drop on the photo. Picks a **random unsolved** piece and uses the Hint fly-in. |
-| `reveal_temp` | common | reveal | 0 | ingredient / 10 → Infinito | Hold, drop on the photo: ghost 20s. Ignored if perm is on. |
-| `area` | rare | gather | 0 | 6 Hint + 3 Lucky + 1×20s | Hold: 3×3 gather. Yellow rect stays until gather tweens finish. |
-| `sarea` | rare | gather | 0 | 10 Hint + 6 Lucky + 2×20s | Hold: 4×4 gather. Same linger overlay. |
-| `solver` | rare | place | 0 | 9 Hint + 5 Lucky | Hold: 3×3. Places every unsolved piece in that zone (fly-in + glow). Empty zone does not consume. |
-| `reveal_perm` | rare | reveal | 0 | 10×20s | Hold, drop on the photo: ghost (alpha 0.3) until that level is solved. Consumes once; not a toggle. Survives leaving the level (saved on the campaign session). |
+| Id | HUD (en) | Tier | Family | Default | Craft result | Effect |
+|---|---|---|---|---|---|---|
+| `hint` | Snap / Encajar | common | place | 0 | ingredient | Hold, aim 1 cell. That piece (or a random unsolved neighbor) flies **into** the slot. |
+| `lucky` | Send / Enviar | common | place | 0 | ingredient | Hold, drop on a **tray chip** or loose board piece. That piece flies home. Miss does not consume. |
+| `reveal_temp` | Glimpse / Vislumbrar | common | reveal | 0 | ingredient / 10 → Peek ∞ | Hold, drop on the photo: ghost 20s. Ignored if perm is on. |
+| `area` | Magnet / Imán | rare | gather | 0 | 6 Snap + 3 Send + 1 Glimpse | Hold: 3×3 gather. Yellow rect stays until gather tweens finish. |
+| `sarea` | Magnet+ / Imán+ | rare | gather | 0 | 10 Snap + 6 Send + 2 Glimpse | Hold: 4×4 gather. Same linger overlay. |
+| `solver` | Fill / Completar | rare | place | 0 | 9 Snap + 9 Send | Hold: 3×3. Places every unsolved piece in that zone (fly-in + glow). Empty zone does not consume. |
+| `reveal_perm` | Peek ∞ / Ver ∞ | rare | reveal | 0 | 10 Glimpse | Hold, drop on the photo: ghost until that level is solved. Consumes once; not a toggle. Survives leaving the level (saved on the campaign session). |
 
 Commons share the same store value. Rares are the farm / craft output. Area is **rare** (no longer a common). A new player starts at **0** on every key; the first charges come from winning levels (or Store / ads).
 
-Hold-tools track **window** `pointermove`. Confirm uses Phaser `transformPointer(pageX, pageY)`. Reveal tools consume only if the pointer is released on the photo. Peek-hold blocks piece drag/rotate so 20s / Infinito cannot be played with the photo in view.
+Hold-tools track **window** `pointermove`. Confirm uses Phaser `transformPointer(pageX, pageY)`. Reveal tools consume only if the pointer is released on the photo. Enviar also hit-tests tray chips (client coords). Peek-hold blocks piece drag/rotate so Glimpse / Peek ∞ cannot be played with the photo in view.
 
 **Craft:** `CRAFT_RECIPES` in [`src/domain/powerups.ts`](../src/domain/powerups.ts). Hub **Workshop** has one button per recipe. The in-level Rares popover can craft the same recipes when ingredients suffice.
 
@@ -335,15 +335,15 @@ Hold-tools track **window** `pointermove`. Confirm uses Phaser `transformPointer
 | Campaign first clear 1 | `completeLevel` bumps unlock | `{ hint: 1 }` |
 | Campaign first clear 2 | same | `{ lucky: 1 }` |
 | Campaign first clear 3 | same | `{ reveal_temp: 1 }` |
-| Campaign first clear 4 | same | `{ hint: 6, lucky: 3, reveal_temp: 1 }` (one Área recipe) |
+| Campaign first clear 4 | same | `{ hint: 6, lucky: 3, reveal_temp: 1 }` (one Magnet recipe) |
 | Campaign first clear 5+ | same | C/B: 1 random common; A/S: 2 random commons |
 | Daily | first win this UTC day | `{ hint: 2, lucky: 2, reveal_temp: 2 }` |
 | Weekly | first win this ISO week | `{ hint: 2, lucky: 4, sarea: 1 }` |
 | Monthly | first win this `YYYY-MM` | `{ hint: 3, reveal_temp: 5, sarea: 2, reveal_perm: 1 }` |
 | Store rewarded ad | After the AdMob reward (or DEV simulate). Cap **5 / UTC day** | 1 random common |
 | Win-card ad | Independent of the Store cap. First clear 5+ / events: ×2 the granted pack. Replay any level: 1 random common. Levels 1–4 first clear: no button. | see above |
-| `pack_handy` | Play product id `pack_handy` (consumable). Vite DEV: local simulate. | 10 hint + 10 lucky + 10 temp |
-| `pack_rare` | Play product id `pack_rare` (consumable). Vite DEV: local simulate. | 2 Área + 3 sÁrea + 2 Infinito + 1 Solver |
+| `pack_handy` | Play product id `pack_handy` (consumable). Vite DEV: local simulate. | 6 Snap + 6 Send + 3 Glimpse |
+| `pack_rare` | Play product id `pack_rare` (consumable). Vite DEV: local simulate. | 2 Magnet + 1 Magnet+ + 1 Peek ∞ + 1 Fill |
 
 Period keys live in `puzzle_adventure_claims_v1`. Replay and a second win in the same period show the existing win card with **no** reward list.
 
@@ -397,8 +397,8 @@ Play Console app id **`com.puzzleadventure.app`**. In-app products are **consuma
 
 | Play product id | Pack |
 |---|---|
-| `pack_handy` | 10 hint + 10 lucky + 10 temp |
-| `pack_rare` | 2 Área + 3 sÁrea + 2 Infinito + 1 Solver |
+| `pack_handy` | 6 Snap + 6 Send + 3 Glimpse |
+| `pack_rare` | 2 Magnet + 1 Magnet+ + 1 Peek ∞ + 1 Fill |
 
 **Prices live only in Play Console** (Handy **1 EUR**, Rare **3 EUR**). The app does not hardcode them. The Store button shows Google’s localized `priceLabel`.
 
@@ -479,7 +479,7 @@ On load, keys starting with `pockets:` are deleted (legacy).
 
 AdMob sample ids live in `src/domain/ads.ts` (not `product.ts`). Craft recipes live in `CRAFT_RECIPES` in `src/domain/powerups.ts`. Grant packs and `STORE_SKUS` are in the same file.
 
-Piece interaction tap threshold: **10px** (`PieceInteraction.ts`). Rotate debounce **150ms** so a finger tap is one 90° turn. Área / sÁrea / Solver grid sizes: **3**, **4**, and **3** (`GameRuntime`). S campaign boards use **128** pieces (ingest writes `piece_count`).
+Piece interaction tap threshold: **10px** (`PieceInteraction.ts`). Rotate debounce **150ms** so a finger tap is one 90° turn. Magnet / Magnet+ / Fill grid sizes: **3**, **4**, and **3** (`GameRuntime`). S campaign boards use **128** pieces (ingest writes `piece_count`).
 
 ---
 
@@ -556,7 +556,7 @@ Use this as the backlog seed, not as committed scope.
 
 **Change snap feel:** `SNAP_DISTANCE_PX` only.
 
-**Change Área size:** `GameRuntime` `new AreaTool(..., 3 | 4, ...)`. `useArea` treats `size >= 4` as sÁrea charges.
+**Change Magnet size:** `GameRuntime` `new AreaTool(..., 3 | 4, ...)`. `useArea` treats `size >= 4` as Magnet+ charges.
 
 **New UI string:** add one `loc({ en, es, de, fr, pt })` in [`src/i18n/messages.ts`](src/i18n/messages.ts). `tsc` fails if a language is missing. Use `t('group.key', { n })` in HUD/menu — never hardcode player-facing copy.
 

@@ -30,7 +30,7 @@ export const POWERUP_DEFS: PowerupDef[] = [
 export const CRAFT_RECIPES: CraftRecipe[] = [
   { to: 'area', cost: { hint: 6, lucky: 3, reveal_temp: 1 } },
   { to: 'sarea', cost: { hint: 10, lucky: 6, reveal_temp: 2 } },
-  { to: 'solver', cost: { hint: 9, lucky: 5 } },
+  { to: 'solver', cost: { hint: 9, lucky: 9 } },
   { to: 'reveal_perm', cost: { reveal_temp: 10 } },
 ];
 
@@ -96,8 +96,8 @@ export interface StoreSku {
 
 export const STORE_SKUS: StoreSku[] = [
   { id: 'ad_common', kind: 'ad', pack: {} },
-  { id: 'pack_handy', kind: 'iap', pack: { hint: 10, lucky: 10, reveal_temp: 10 } },
-  { id: 'pack_rare', kind: 'iap', pack: { area: 2, sarea: 3, reveal_perm: 2, solver: 1 } },
+  { id: 'pack_handy', kind: 'iap', pack: { hint: 6, lucky: 6, reveal_temp: 3 } },
+  { id: 'pack_rare', kind: 'iap', pack: { area: 2, sarea: 1, reveal_perm: 1, solver: 1 } },
 ];
 
 export const IAP_SKU_IDS: IapSkuId[] = STORE_SKUS.filter((s): s is StoreSku & { id: IapSkuId; kind: 'iap' } => s.kind === 'iap').map(

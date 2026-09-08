@@ -188,6 +188,22 @@ export class PieceTray {
     chip?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
+  pieceIdAt(clientX: number, clientY: number): PieceId | null {
+    for (const id of [...this.orderedIds()].reverse()) {
+      const chip = this.chips.get(id);
+      if (!chip || chip.classList.contains('is-dragging')) continue;
+      const r = chip.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) return id;
+    }
+    return null;
+  }
+
+  setToolTarget(id: PieceId | null) {
+    for (const [pid, chip] of this.chips) {
+      chip.classList.toggle('is-tool-target', pid === id);
+    }
+  }
+
   private orderedIds(): PieceId[] {
     return this.session.getTrayPieces().map((p) => p.id);
   }

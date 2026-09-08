@@ -10,8 +10,8 @@ describe('billing', () => {
     expect(IAP_SKU_IDS).toEqual(['pack_handy', 'pack_rare']);
     expect(isIapSkuId('pack_handy')).toBe(true);
     expect(isIapSkuId('ad_common')).toBe(false);
-    expect(getIapSku('pack_handy')?.pack).toEqual({ hint: 10, lucky: 10, reveal_temp: 10 });
-    expect(getIapSku('pack_rare')?.pack).toEqual({ area: 2, sarea: 3, reveal_perm: 2, solver: 1 });
+    expect(getIapSku('pack_handy')?.pack).toEqual({ hint: 6, lucky: 6, reveal_temp: 3 });
+    expect(getIapSku('pack_rare')?.pack).toEqual({ area: 2, sarea: 1, reveal_perm: 1, solver: 1 });
   });
 
   it('simulate purchase does not touch inventory by itself', async () => {

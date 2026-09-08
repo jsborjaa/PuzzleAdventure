@@ -56,7 +56,7 @@ describe('powerups catalog', () => {
   it('has the four craft recipes', () => {
     expect(CRAFT_RECIPES.map((r) => r.to)).toEqual(['area', 'sarea', 'solver', 'reveal_perm']);
     expect(CRAFT_RECIPES.find((r) => r.to === 'area')?.cost).toEqual({ hint: 6, lucky: 3, reveal_temp: 1 });
-    expect(CRAFT_RECIPES.find((r) => r.to === 'solver')?.cost).toEqual({ hint: 9, lucky: 5 });
+    expect(CRAFT_RECIPES.find((r) => r.to === 'solver')?.cost).toEqual({ hint: 9, lucky: 9 });
   });
 
   it('keeps level-5 campaign boards on the A rank used by first-clear', () => {

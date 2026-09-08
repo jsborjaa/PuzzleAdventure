@@ -91,11 +91,13 @@ describe('PuzzleSession', () => {
     luckyStore.setPowerups({ ...luckyStore.getPowerups(), lucky: 1 });
     const session = makeSession('fresh', { store: luckyStore });
     expect(session.getInventory().lucky).toBe(1);
-    const luckyId = session.queueLucky();
-    expect(luckyId).toBeTruthy();
+    const luckyId = session.getPieces().find((p) => !p.isSolved)!.id;
+    expect(session.queueLucky(luckyId)).toBe(luckyId);
     expect(session.getInventory().lucky).toBe(1);
-    expect(session.confirmLucky(luckyId!)).toBe(true);
+    expect(session.queueLucky(luckyId)).toBe(luckyId);
+    expect(session.confirmLucky(luckyId)).toBe(true);
     expect(session.getInventory().lucky).toBe(0);
+    expect(session.queueLucky(luckyId)).toBeNull();
 
     const store = new ProgressStore(new MemoryStorage());
     store.setPowerups({ ...store.getPowerups(), solver: 1 });

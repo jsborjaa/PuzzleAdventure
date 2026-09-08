@@ -21,7 +21,7 @@ describe('inventory', () => {
     expect(consume(start, 'area')).toBeNull();
   });
 
-  it('crafts Area, sArea, Solver, and Infinite from the recipes', () => {
+  it('crafts Magnet, Magnet+, Fill, and Peek ∞ from the recipes', () => {
     expect(
       craft(createInventory({ hint: 6, lucky: 3, reveal_temp: 1, area: 0 }), 'area'),
     ).toMatchObject({ hint: 0, lucky: 0, reveal_temp: 0, area: 1 });
@@ -29,7 +29,8 @@ describe('inventory', () => {
     expect(
       craft(createInventory({ hint: 10, lucky: 6, reveal_temp: 2, sarea: 0 }), 'sarea'),
     ).toMatchObject({ hint: 0, lucky: 0, reveal_temp: 0, sarea: 1 });
-    expect(craft(createInventory({ hint: 9, lucky: 5, solver: 0 }), 'solver')).toMatchObject({
+    expect(craft(createInventory({ hint: 9, lucky: 5, solver: 0 }), 'solver')).toBeNull();
+    expect(craft(createInventory({ hint: 9, lucky: 9, solver: 0 }), 'solver')).toMatchObject({
       hint: 0,
       lucky: 0,
       solver: 1,

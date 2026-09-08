@@ -32,13 +32,13 @@ export class ToolManager {
   moveToPage(pageX: number, pageY: number, wasMove = true) {
     const pointer = this.scene.input.activePointer;
     this.scene.input.manager.transformPointer(pointer, pageX, pageY, wasMove);
-    this.current?.onPointerMove(pointer);
+    this.current?.onPointerMove(pointer, pageX, pageY);
     return pointer;
   }
 
   confirmAt(pageX: number, pageY: number) {
     const pointer = this.moveToPage(pageX, pageY, false);
-    this.current?.confirm(pointer);
+    this.current?.confirm(pointer, pageX, pageY);
     this.activate(null);
   }
 

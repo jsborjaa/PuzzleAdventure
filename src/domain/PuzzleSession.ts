@@ -235,12 +235,12 @@ export class PuzzleSession {
     return this.placePiece(id, { consume: 'hint' });
   }
 
-  queueLucky(): PieceId | null {
+  queueLucky(id: PieceId): PieceId | null {
     if (this.mode === 'replay') return null;
     if (!hasCharges(this.inventory, 'lucky')) return null;
-    const unsolved = this.getPieces().filter((p) => !p.isSolved);
-    if (unsolved.length === 0) return null;
-    return unsolved[Math.floor(Math.random() * unsolved.length)]!.id;
+    const piece = this.getPiece(id);
+    if (!piece || piece.isSolved) return null;
+    return id;
   }
 
   confirmLucky(id: PieceId): boolean {

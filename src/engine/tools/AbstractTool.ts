@@ -20,6 +20,6 @@ export abstract class AbstractTool {
 
   protected onActivate() {}
   protected onDeactivate() {}
-  onPointerMove(_pointer: Phaser.Input.Pointer) {}
-  confirm(_pointer: Phaser.Input.Pointer) {}
+  onPointerMove(_pointer: Phaser.Input.Pointer, _pageX?: number, _pageY?: number) {}
+  confirm(_pointer: Phaser.Input.Pointer, _pageX?: number, _pageY?: number) {}
 }

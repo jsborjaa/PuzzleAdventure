@@ -273,6 +273,12 @@ body {
   display: none;
 }
 
+.piece-chip.is-tool-target canvas {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
 .piece-chip-slot {
   flex: none;
   height: 78%;
@@ -321,6 +327,11 @@ body {
   box-shadow: 0 6px 0 #e0b56a, var(--shadow);
   z-index: 20;
   pointer-events: auto;
+}
+
+.hud-popover.is-aiming {
+  opacity: 0;
+  pointer-events: none;
 }
 
 #app.play-active.is-portrait .hud-popover {
@@ -597,9 +608,10 @@ body {
 }
 
 .hud-round svg {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   display: block;
+  overflow: visible;
 }
 
 .hud-round.active {
@@ -877,8 +889,8 @@ body {
 }
 
 .hub-gear svg {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 
 .hub-body {
@@ -1244,8 +1256,8 @@ body {
 }
 
 .dock-tab svg {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
 }
 
 .dock-tab.is-active {
@@ -1324,6 +1336,11 @@ body {
     width: 52px;
     height: 52px;
     min-height: 52px;
+  }
+
+  .hud-round svg {
+    width: 34px;
+    height: 34px;
   }
 }
 

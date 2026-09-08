@@ -125,7 +125,7 @@ export class GameRuntime {
     this.tools.addTool('area', new AreaTool(this.scene, this.board, 3, this.session));
     this.tools.addTool('sarea', new AreaTool(this.scene, this.board, 4, this.session));
     this.tools.addTool('hint', new HintTool(this.scene, this.board, this.session, (id) => this.board.markSolved(id)));
-    this.tools.addTool('lucky', new LuckyTool(this.scene, this.board, this.session, (id) => this.board.markSolved(id)));
+    this.tools.addTool('lucky', new LuckyTool(this.scene, this.board, this.session, (id) => this.board.markSolved(id), () => this.tray));
     this.tools.addTool('solver', new SolverTool(this.scene, this.board, this.session, (id) => this.board.markSolved(id)));
     this.tools.addTool('reveal_temp', new RevealTool(this.scene, this.board, this.session, 'reveal_temp'));
     this.tools.addTool('reveal_perm', new RevealTool(this.scene, this.board, this.session, 'reveal_perm'));

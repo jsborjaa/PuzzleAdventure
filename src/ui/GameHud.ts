@@ -119,7 +119,7 @@ export class GameHud {
       this.toast(t('hud.quality', { n: this.session.qualityGate.to }));
     }
 
-    window.addEventListener('pointerdown', this.onDocPointer, { signal: this.abort.signal });
+    window.addEventListener('pointerdown', this.onDocPointer, { capture: true, signal: this.abort.signal });
   }
 
   destroy() {
@@ -203,6 +203,10 @@ export class GameHud {
     this.openTier = null;
   }
 
+  private stowPopover() {
+    this.popover?.classList.add('is-aiming');
+  }
+
   private chromeItem(icon: Parameters<typeof roundButton>[0], label: string, tone: string, onClick?: () => void) {
     const wrap = el('div', 'hud-chrome-item');
     const btn = roundButton(icon, label, tone, onClick);
@@ -220,7 +224,16 @@ export class GameHud {
       e.stopPropagation();
       if ((this.session.getInventory()[key] ?? 0) <= 0) return;
       btn.classList.add('active');
+      const pe = e as PointerEvent;
+      if (typeof pe.pointerId === 'number') {
+        try {
+          btn.setPointerCapture(pe.pointerId);
+        } catch {
+          /* capture is best-effort; window pointerup still ends the tool */
+        }
+      }
       this.callbacks.onActivateTool(tool);
+      this.stowPopover();
       let done = false;
       const stop = (ev: Event) => {
         if (done) return;
